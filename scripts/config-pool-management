@@ -4,6 +4,7 @@
 
 import click
 import logging
+import os
 from ConfPool import ConfPool
 
 
@@ -13,8 +14,9 @@ CONTEXT_SETTINGS = dict(help_option_names=['-h', '--help'])
 @click.argument('path', type=click.Path(exists=True, file_okay=False, writable=True))
 @click.option('-b', '--base', type=click.STRING, default='ssh://git@gitlab.cern.ch:7999/dune-daq/online/np02-configs-base.git')
 @click.option('-o', '--operation', type=click.STRING, default='ssh://git@gitlab.cern.ch:7999/dune-daq/online/np02-configs-operation.git')
+@click.option('-r', '--release', type=click.STRING, default=os.environ["SPACK_RELEASE"])
 
-def cli(path, base, operation) :
+def cli(path, base, operation, release) :
 
     logging.basicConfig(
         format="%(asctime)s %(levelname)-8s %(message)s",
@@ -24,6 +26,12 @@ def cli(path, base, operation) :
     
     pool=ConfPool(path, operation_url=operation, base_url=base)
 
+    cods = pool.get_cods()
+        
+    logging.info("Available CODs: {}".format( ', '.join(cods)))
+
+    confs = pool.get_confs()
+    logging.info("Available Configurations: {}".format( ', '.join(confs)))
 
 if __name__ == '__main__':
     cli(show_default=True, standalone_mode=True)

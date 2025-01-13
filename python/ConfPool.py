@@ -26,10 +26,15 @@ class ConfPool :
             for r in self.repo.remotes :
                 logging.info("%s -> %s", r.name, r.url)
         
-#    def get_cods( self ) -> list :
-
-#    def get_confs( self,
-#                   regex ) -> list :
+    def get_cods( self ) -> list[str] :
+        self.base.fetch()
+        return [r.name for r in self.base.refs]
+        
+        
+    def get_confs( self,
+                   regex=None ) -> list :
+        self.operation.fetch()
+        return [r.name for r in self.operation.refs]
 
 #    def propagate_cod( self,
 #                       base_ref,
