@@ -3,6 +3,8 @@
 # @file config-pool-management is the executable used to interact with the ConfigPool class
 
 import click
+from Confpool import ConfPool
+
 
 CONTEXT_SETTINGS = dict(help_option_names=['-h', '--help'])
 
