@@ -3,18 +3,26 @@
 # @file config-pool-management is the executable used to interact with the ConfigPool class
 
 import click
-from Confpool import ConfPool
+import logging
+from ConfPool import ConfPool
 
 
 CONTEXT_SETTINGS = dict(help_option_names=['-h', '--help'])
 
 @click.command(context_settings=CONTEXT_SETTINGS)
-@click.argument('path', type=click.Path(exists=True, file_okay=False, writebla=True))
+@click.argument('path', type=click.Path(exists=True, file_okay=False, writable=True))
+@click.option('-b', '--base', type=click.STRING, default='ssh://git@gitlab.cern.ch:7999/dune-daq/online/np02-configs-base.git')
+@click.option('-o', '--operation', type=click.STRING, default='ssh://git@gitlab.cern.ch:7999/dune-daq/online/np02-configs-operation.git')
 
-def cli(path) :
+def cli(path, base, operation) :
 
-
-
+    logging.basicConfig(
+        format="%(asctime)s %(levelname)-8s %(message)s",
+        level=logging.DEBUG,
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+    
+    pool=ConfPool(path, operation_url=operation, base_url=base)
 
 
 if __name__ == '__main__':
