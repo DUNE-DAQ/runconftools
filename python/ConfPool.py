@@ -80,7 +80,7 @@ class ConfPool :
         
         confs = self.get_confs(release=re.compile(release))
         if conf not in confs :
-            logging.error("{} not in the configurations for {}".format(conf, release))
+            logging.error("%s not in the configurations for %s",conf, release)
             return False
 
         ref_name = release+'/'+conf
