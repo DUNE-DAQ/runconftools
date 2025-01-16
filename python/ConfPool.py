@@ -2,13 +2,17 @@
 
 import git
 from git import Repo
+import os
 import logging
+import re
 
 class ConfPool :
     def __init__( self,
                   path,
                   operation_url:str=None,
                   base_url:str=None ) -> None :
+        self.conf_regex = re.compile("^operation/([^/]+)/(.*)$")
+        self.cod_regex = re.compile("^base/(.*)$")
         try :
             self.repo=Repo(path)
         except git.InvalidGitRepositoryError:
@@ -28,13 +32,47 @@ class ConfPool :
         
     def get_cods( self ) -> list[str] :
         self.base.fetch()
-        return [r.name for r in self.base.refs]
+        branches = [r.name for r in self.base.refs]
+        cods=[]
+        for b in branches :
+            match = self.cod_regex.match(b)
+            if not match : continue
+            cods.append(match.group(1))
+        return cods
         
+    def get_daq_versions( self ) -> list[str] :
+        self.operation.fetch()
+        branches = [r.name for r in self.operation.refs]
+        versions = []
+        for b in branches :
+            match = self.conf_regex.match(b)
+            if not match : continue
+            v = match.group(1)
+            if v not in versions:
+                versions.append(v)
+        return versions
+                  
         
     def get_confs( self,
-                   regex=None ) -> list :
+                   release:re.Pattern=re.compile(os.environ["SPACK_RELEASE"]),
+                   regex:re.Pattern=None ) -> list :
         self.operation.fetch()
-        return [r.name for r in self.operation.refs]
+        branches = [r.name for r in self.operation.refs]
+        confs = []
+        for b in branches :
+            match = self.conf_regex.match(b)
+            if match :
+                r = match.group(1)
+                c = match.group(2)
+                if release :
+                    if not release.match(r) :
+                        continue
+                if regex :
+                    if not regex.match(c) :
+                        continue
+                if c not in confs :
+                    confs.append(c)
+        return confs
 
 #    def propagate_cod( self,
 #                       base_ref,
