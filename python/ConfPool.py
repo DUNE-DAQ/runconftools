@@ -55,7 +55,7 @@ class ConfPool :
         
     def get_confs( self,
                    release:re.Pattern=re.compile(os.environ["SPACK_RELEASE"]),
-                   regex:re.Pattern=None ) -> list :
+                   regex:re.Pattern=re.compile(".*") ) -> list :
         self.operation.fetch()
         branches = [r.name for r in self.operation.refs]
         confs = []
@@ -74,9 +74,23 @@ class ConfPool :
                     confs.append(c)
         return confs
 
-#    def propagate_cod( self,
-#                       base_ref,
-#                       key_regex ) -> list :
+    def checkout_conf( self,
+                       conf:str,
+                       release:str=os.environ["SPACK_RELEASE"]) -> bool :
+        
+        confs = self.get_confs(release=re.compile(release))
+        if conf not in confs :
+            logging.error("{} not in the configurations for {}".format(conf, release))
+            return False
+
+        ref_name = release+'/'+conf
+        self.repo.create_head(ref_name, self.operation.refs[ref_name]).set_tracking_branch(self.operation.refs[ref_name]).checkout()
+        return True
+    
+    #    def propagate_cod( self,
+#                       cod,
+#                       release_tag,
+#                       conf_regex:re.Pattern=re.compile(".*") ) -> list :
 
 #    def tag( self,
 #             base_ref,

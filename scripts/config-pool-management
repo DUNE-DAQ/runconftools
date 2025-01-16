@@ -16,8 +16,10 @@ CONTEXT_SETTINGS = dict(help_option_names=['-h', '--help'])
 @click.option('-b', '--base', type=click.STRING, default='ssh://git@gitlab.cern.ch:7999/dune-daq/online/np02-configs-base.git')
 @click.option('-o', '--operation', type=click.STRING, default='ssh://git@gitlab.cern.ch:7999/dune-daq/online/np02-configs-operation.git')
 @click.option('-r', '--release', type=click.STRING, default=os.environ["SPACK_RELEASE"])
+@click.option('-c', '--conf', type=click.STRING, default=None)
 
-def cli(path, base, operation, release) :
+
+def cli(path, base, operation, release, conf) :
 
     logging.basicConfig(
         format="%(asctime)s %(levelname)-8s %(message)s",
@@ -37,5 +39,8 @@ def cli(path, base, operation, release) :
     confs = pool.get_confs(release=re.compile(release))
     logging.info("Available Configurations: {}".format( ', '.join(confs)))
 
+    if conf :
+        pool.checkout_conf(release=release, conf=conf)
+    
 if __name__ == '__main__':
     cli(show_default=True, standalone_mode=True)
