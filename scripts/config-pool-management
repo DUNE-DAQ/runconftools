@@ -13,7 +13,7 @@ CONTEXT_SETTINGS = dict(help_option_names=['-h', '--help'])
 
 @click.command(context_settings=CONTEXT_SETTINGS)
 @click.argument('path', type=click.Path(exists=True, file_okay=False, writable=True))
-@click.option('-b', '--base', type=click.STRING, default='ssh://git@gitlab.cern.ch:7999/dune-daq/online/np02-configs-base.git')
+@click.option('-b', '--base', type=click.STRING, default='ssh://git@gitlab.cern.ch:7999/dune-daq/online/ehn1-daqconfigs.git')
 @click.option('-o', '--operation', type=click.STRING, default='ssh://git@gitlab.cern.ch:7999/dune-daq/online/np02-configs-operation.git')
 @click.option('-r', '--release', type=click.STRING, default=os.environ["SPACK_RELEASE"])
 @click.option('-c', '--conf', type=click.STRING, default=None)
