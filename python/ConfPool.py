@@ -39,7 +39,20 @@ class ConfPool :
             if not match : continue
             cods.append(match.group(1))
         return cods
+
+    def checkout_cod( self,
+                      cod) -> git.refs.head.Head :
         
+        cods = self.get_cods()
+        if cod not in cods :
+            logging.error("%s not in the avilable CODs",cod)
+            return None
+
+        ref_name = cod
+        head = self.repo.create_head(ref_name, self.base.refs[ref_name]).set_tracking_branch(self.base.refs[ref_name]).checkout()
+        return head
+
+    
     def get_daq_versions( self ) -> list[str] :
         self.operation.fetch()
         branches = [r.name for r in self.operation.refs]
@@ -76,22 +89,55 @@ class ConfPool :
 
     def checkout_conf( self,
                        conf:str,
-                       release:str=os.environ["SPACK_RELEASE"]) -> bool :
+                       release:str=os.environ["SPACK_RELEASE"]) -> git.refs.head.Head :
         
         confs = self.get_confs(release=re.compile(release))
         if conf not in confs :
             logging.error("%s not in the configurations for %s",conf, release)
-            return False
+            return None
 
         ref_name = release+'/'+conf
-        self.repo.create_head(ref_name, self.operation.refs[ref_name]).set_tracking_branch(self.operation.refs[ref_name]).checkout()
-        return True
-    
-    #    def propagate_cod( self,
-#                       cod,
-#                       release_tag,
-#                       conf_regex:re.Pattern=re.compile(".*") ) -> list :
+        head = self.repo.create_head(ref_name, self.operation.refs[ref_name]).set_tracking_branch(self.operation.refs[ref_name]).checkout()
+        return head
 
+    
+    def propagate_cod( self,
+                       cod:str,
+                       release_tag=None,
+                       conf_regex:re.Pattern=re.compile(".*") ) -> list :
+
+        if not release_tag:
+            release_tag = cod
+
+        cod_head = self.checkout_cod(cod)
+        if not cod_head :
+            return []
+        
+        releases = self.get_daq_releases()
+        if release_tag not in releases:
+            logging.warning("%s is not among the available releasese", release_tag)
+            return []
+        
+        confs = self.get_confs(release=re.compile(release_tag))
+        update_list=[]
+        for c in confs :
+            # get the reference 
+            head = checkout_conf(conf=c, release=release_tag)
+            
+            #  findl the latest common commit 
+            base_merge = self.repo.merge_base(cod_head, head)
+
+            # merge the cod
+            self.repo.index.merge_tree(cod_head, base=base_merge)
+
+            #commit the change
+            self.repo.index.commit("new {} merged into {}".format(cod, c),
+                                   parent_commits=(cod_head.commit, head.commit))
+            
+            update_list.append(c)
+
+        return update_list
+        
 #    def tag( self,
 #             base_ref,
 #             key_regex ) -> list :
