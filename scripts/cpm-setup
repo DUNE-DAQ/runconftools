@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-# @file config-pool-management is the executable used to interact with the ConfigPool class
+# @file cpm-setupo is the executable used to interact with the ConfigPool class and setup a working environment
 
 import click
 import logging
