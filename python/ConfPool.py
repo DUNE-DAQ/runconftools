@@ -5,14 +5,17 @@ from git import Repo
 import os
 import logging
 import re
+import sys
 
 class ConfPool :
     def __init__( self,
                   path,
+                  apparatus:str='np02',
                   operation_url:str=None,
                   base_url:str=None ) -> None :
         self.conf_regex = re.compile("^operation/([^/]+)/(.*)$")
         self.cod_regex = re.compile("^base/(.*)$")
+        self.apparatus=apparatus
         try :
             self.repo=Repo(path)
         except git.InvalidGitRepositoryError:
@@ -29,6 +32,8 @@ class ConfPool :
             logging.info("Repo in %s set with the following remotes:", path)
             for r in self.repo.remotes :
                 logging.info("%s -> %s", r.name, r.url)
+            sys.path.append(path+'/generators')
+
         
     def get_cods( self ) -> list[str] :
         self.base.fetch()
@@ -52,6 +57,17 @@ class ConfPool :
         head = self.repo.create_head(ref_name, self.base.refs[ref_name]).set_tracking_branch(self.base.refs[ref_name]).checkout()
         return head
 
+    def get_generators(self,
+                       cod:str) -> list[str] :
+        regex = re.compile('(.*)\.py$')
+        self.checkout_cod(cod)
+        files=[]
+        for f in os.listdir(self.path+'/generators/'+self.apparatus) :
+            if os.path.isfile(f) :
+                if regex.match(f) :
+                    files.append(os.path.basename(f))
+        return files
+            
     
     def get_daq_versions( self ) -> list[str] :
         self.operation.fetch()
