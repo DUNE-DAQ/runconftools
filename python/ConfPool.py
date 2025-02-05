@@ -62,10 +62,12 @@ class ConfPool :
         regex = re.compile('(.*)\.py$')
         self.checkout_cod(cod)
         files=[]
-        for f in os.listdir(self.path+'/generators/'+self.apparatus) :
-            if os.path.isfile(f) :
-                if regex.match(f) :
-                    files.append(os.path.basename(f))
+        path=self.repo.working_dir+'/generators/'+self.apparatus
+        for f in os.listdir(path) :
+            if os.path.isfile(os.path.join(path,f)) :
+                match = regex.match(f)
+                if match :
+                    files.append(match.group(1))
         return files
             
     
