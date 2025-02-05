@@ -6,6 +6,8 @@ import os
 import logging
 import re
 import sys
+import importlib
+import sh
 
 class ConfPool :
     def __init__( self,
@@ -45,6 +47,10 @@ class ConfPool :
             cods.append(match.group(1))
         return cods
 
+    def setup_conf_path(self) -> None :
+        os.environ["DUNEDAQ_DB_DATA_ROOT"]=self.repo.working_dir
+        os.environ["DUNEDAQ_DB_PATH"] = f"{self.repo.working_dir}:{os.environ.get('DUNEDAQ_DB_PATH', '')}"
+        
     def checkout_cod( self,
                       cod) -> git.refs.head.Head :
         
@@ -55,6 +61,7 @@ class ConfPool :
 
         ref_name = cod
         head = self.repo.create_head(ref_name, self.base.refs[ref_name]).set_tracking_branch(self.base.refs[ref_name]).checkout()
+        self.setup_conf_path()
         return head
 
     def get_generators(self,
@@ -116,9 +123,33 @@ class ConfPool :
 
         ref_name = release+'/'+conf
         head = self.repo.create_head(ref_name, self.operation.refs[ref_name]).set_tracking_branch(self.operation.refs[ref_name]).checkout()
+        self.setup_conf_path()
         return head
 
-    
+
+    def generate_conf( self,
+                       cod:str,
+                       generator:str ) -> bool :
+
+        # get the cod
+        head = self.checkout_cod(cod)
+
+        # run the generator
+        ## link the module
+        module_name = self.apparatus+'.'+generator
+        module = importlib.import_module(module_name)
+
+        ## get the function
+        functor = getattr(module, 'generate')
+
+        ## execute the function
+        res = functor(self.repo.working_dir)
+
+        # move to a new branch
+
+        # push the branch
+        return res
+        
     def propagate_cod( self,
                        cod:str,
                        release_tag=None,

@@ -32,6 +32,8 @@ def cli(path, apparatus, base, operation, release, debug) :
     
     pool=ConfPool(path, operation_url=operation, base_url=base)
 
+    pool.generate_conf(cod=release, generator='monitoring-no-tpg')
+    
     
 if __name__ == '__main__':
     cli(show_default=True, standalone_mode=True)
