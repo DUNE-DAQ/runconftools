@@ -129,10 +129,27 @@ class ConfPool :
 
     def generate_conf( self,
                        cod:str,
-                       generator:str ) -> bool :
+                       generator:str,
+                       release_tag:str=None ) -> bool :
 
-        # get the cod
-        head = self.checkout_cod(cod)
+        if not release_tag:
+            release_tag = cod
+
+        confs = self.get_confs(release=re.compile(release_tag))
+
+        ref_name = release_tag+'/'+generator
+
+        # prepare the branch
+        head = None
+        if generator not in cod :
+            # get the cod
+            self.checkout_cod(cod)
+            head = self.repo.create_head(ref_name).checkout()
+        else :
+            head = self.checkout_conf(generator, release=re.compile(release_tag))
+            ## merge xtheirs
+            self.repo.git.merge("-Xtheirs", "base/"+cod)
+            head.commit("Update from base")
 
         # run the generator
         ## link the module
@@ -145,9 +162,11 @@ class ConfPool :
         ## execute the function
         res = functor(self.repo.working_dir)
 
-        # move to a new branch
-
+        # commit 
+        head.commit("Execute "+generator)
+        
         # push the branch
+        self.operation.push(reference_name)
         return res
         
     def propagate_cod( self,
