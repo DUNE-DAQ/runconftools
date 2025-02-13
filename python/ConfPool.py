@@ -122,7 +122,7 @@ class ConfPool :
             logging.error("%s not in the configurations for %s",conf, release)
             return None
 
-        ref_name = release+'/'+conf
+        ref_name = f"{release}/{conf}"
         head = self.repo.create_head(ref_name, self.operation.refs[ref_name]).set_tracking_branch(self.operation.refs[ref_name]).checkout()
         self.setup_conf_path()
         return head
@@ -142,15 +142,21 @@ class ConfPool :
 
         # prepare the branch
         head = None
-        if generator not in cod :
+        if generator not in confs :
+            logging.info(f"New configuration {generator} created from base {cod}")
             # get the cod
             self.checkout_cod(cod)
+            branches = [b.name for b in self.repo.branches]
+            logging.debug(",".join(branches))
+            if ref_name in branches :
+                self.repo.delete_head(ref_name, force=True)
             head = self.repo.create_head(ref_name).checkout()
         else :
-            head = self.checkout_conf(generator, release=re.compile(release_tag))
+            logging.warning(f"Configuration {generator} overrides existing operation branch")
+            head = self.checkout_conf(generator, release=release_tag)
             ## merge xtheirs
             self.repo.git.merge("-Xtheirs", "base/"+cod)
-            head.commit("Update from base")
+            self.repo.index.commit(f"Update from base {cod}")
 
         # run the generator
         ## link the module
@@ -163,12 +169,13 @@ class ConfPool :
         ## execute the function
         res = functor(self.repo.working_dir)
 
-        # commit 
-        head.commit("Execute "+generator)
+        # commit
+        self.repo.index.commit("Execute "+generator)
         
         # push the branch
-        self.operation.push(reference_name)
+        self.operation.push(ref_name)
         return res
+
         
     def propagate_cod( self,
                        cod:str,
