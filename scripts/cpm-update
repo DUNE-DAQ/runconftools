@@ -33,7 +33,7 @@ def cli(path, apparatus, base, operation, cod, release, debug) :
     
     pool=ConfPool(path, operation_url=operation, base_url=base)
 
-    pool.generate_conf(cod=cod, generator='monitoring-no-tpg', release_tag=release)
+    pool.propagate_cod(cod=cod, release_tag=release)
     
     
 if __name__ == '__main__':

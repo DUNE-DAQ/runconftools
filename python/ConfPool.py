@@ -180,40 +180,20 @@ class ConfPool :
     def propagate_cod( self,
                        cod:str,
                        release_tag=None,
-                       conf_regex:re.Pattern=re.compile(".*") ) -> list :
+                       conf_regex:re.Pattern=re.compile(".*") ):
 
         if not release_tag:
             release_tag = cod
 
         cod_head = self.checkout_cod(cod)
         if not cod_head :
-            return []
+            return
         
-        releases = self.get_daq_releases()
-        if release_tag not in releases:
-            logging.warning("%s is not among the available releasese", release_tag)
-            return []
-        
-        confs = self.get_confs(release=re.compile(release_tag))
-        update_list=[]
-        for c in confs :
-            # get the reference 
-            head = checkout_conf(conf=c, release=release_tag)
+        generators = self.get_generators(cod)
+        for g in generators :
+            if conf_regex.match(g) :
+                self.generate_conf(cod=cod, generator=g, release_tag=release_tag)
             
-            #  findl the latest common commit 
-            base_merge = self.repo.merge_base(cod_head, head)
-
-            # merge the cod
-            self.repo.index.merge_tree(cod_head, base=base_merge)
-
-            #commit the change
-            self.repo.index.commit("new {} merged into {}".format(cod, c),
-                                   parent_commits=(cod_head.commit, head.commit))
-            
-            update_list.append(c)
-
-        return update_list
-        
 #    def tag( self,
 #             base_ref,
 #             key_regex ) -> list :
