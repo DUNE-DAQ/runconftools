@@ -70,11 +70,12 @@ class ConfPool :
         self.checkout_cod(cod)
         files=[]
         path=self.repo.working_dir+'/generators/'+self.apparatus
-        for f in os.listdir(path) :
-            if os.path.isfile(os.path.join(path,f)) :
-                match = regex.match(f)
-                if match :
-                    files.append(match.group(1))
+        if os.path.isdir(path) :
+            for f in os.listdir(path) :
+                if os.path.isfile(os.path.join(path,f)) :
+                    match = regex.match(f)
+                    if match :
+                        files.append(match.group(1))
         return files
             
     
