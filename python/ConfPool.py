@@ -145,19 +145,24 @@ class ConfPool :
         head = None
         if generator not in confs :
             logging.info(f"New configuration {generator} created from base {cod}")
-            # get the cod
-            self.checkout_cod(cod)
-            branches = [b.name for b in self.repo.branches]
-            logging.debug(",".join(branches))
-            if ref_name in branches :
-                self.repo.delete_head(ref_name, force=True)
-            head = self.repo.create_head(ref_name).checkout()
         else :
             logging.warning(f"Configuration {generator} overrides existing operation branch")
-            head = self.checkout_conf(generator, release=release_tag)
-            ## merge xtheirs
-            self.repo.git.merge("-Xtheirs", "base/"+cod)
-            self.repo.index.commit(f"Update from base {cod}")
+            self.operation.push(f":{ref_name}")
+
+        self.checkout_cod(cod)
+        branches = [b.name for b in self.repo.branches]
+        logging.debug(",".join(branches))
+        if ref_name in branches :
+            self.repo.delete_head(ref_name, force=True)
+        head = self.repo.create_head(ref_name).checkout()
+
+#            head = self.checkout_conf(generator, release=release_tag)
+#            ## merge xtheirs
+#            self.repo.git.merge("-Xtheirs", "base/"+cod)
+#            logging.info(f"Merge from base {cod}")
+#            self.repo.index.commit(f"Update from base {cod}")
+#            logging.debug("Commit on branch")
+
 
         # run the generator
         ## link the module
@@ -170,11 +175,21 @@ class ConfPool :
         ## execute the function
         res = functor(self.repo.working_dir)
 
-        # commit
-        self.repo.git.commit(message="Execute "+generator)
-        
+        # find changed files
+        files = self.repo.git.diff(None, name_only=True)
+        if not files :
+            logging.info("No changes")
+            # no new commit
+        else:
+            file_list = files.split('\n')
+            logging.debug("Files that changed: "+", ".join(file_list))
+            for f in file_list :
+                self.repo.git.add(f)
+            # commit
+            self.repo.git.commit("-m", f"Execute {generator}")
+
         # push the branch
-        self.operation.push(ref_name)
+        self.operation.push(f"{ref_name}:{ref_name}")
         return res
 
         

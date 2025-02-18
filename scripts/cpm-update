@@ -18,12 +18,13 @@ CONTEXT_SETTINGS = dict(help_option_names=['-h', '--help'])
 @click.option('-o', '--operation', type=click.STRING, default='ssh://git@gitlab.cern.ch:7999/dune-daq/online/np02-configs-operation.git')
 @click.option('-c', '--cod', type=click.STRING, default=os.environ["SPACK_RELEASE"])
 @click.option('-r', '--release', type=click.STRING, default=os.environ["SPACK_RELEASE"])
+@click.option('--conf', type=click.STRING, default=".*")
 
 @click.option('--debug', type=click.BOOL, default=False, is_flag=True, help='Set debug print levels')
 
 
 
-def cli(path, apparatus, base, operation, cod, release, debug) :
+def cli(path, apparatus, base, operation, cod, release, conf, debug) :
 
     logging.basicConfig(
         format="%(asctime)s %(levelname)-8s %(message)s",
@@ -33,7 +34,7 @@ def cli(path, apparatus, base, operation, cod, release, debug) :
     
     pool=ConfPool(path, operation_url=operation, base_url=base)
 
-    pool.propagate_cod(cod=cod, release_tag=release)
+    pool.propagate_cod(cod=cod, release_tag=release, conf_regex=re.compile(conf))
     
     
 if __name__ == '__main__':
