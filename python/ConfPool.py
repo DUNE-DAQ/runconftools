@@ -145,24 +145,19 @@ class ConfPool :
         head = None
         if generator not in confs :
             logging.info(f"New configuration {generator} created from base {cod}")
+            self.checkout_cod(cod)
+            branches = [b.name for b in self.repo.branches]
+            logging.debug(",".join(branches))
+            if ref_name in branches :
+                self.repo.delete_head(ref_name, force=True)
+            head = self.repo.create_head(ref_name).checkout()
         else :
             logging.warning(f"Configuration {generator} overrides existing operation branch")
-            self.operation.push(f":{ref_name}")
-
-        self.checkout_cod(cod)
-        branches = [b.name for b in self.repo.branches]
-        logging.debug(",".join(branches))
-        if ref_name in branches :
-            self.repo.delete_head(ref_name, force=True)
-        head = self.repo.create_head(ref_name).checkout()
-
-#            head = self.checkout_conf(generator, release=release_tag)
-#            ## merge xtheirs
-#            self.repo.git.merge("-Xtheirs", "base/"+cod)
-#            logging.info(f"Merge from base {cod}")
-#            self.repo.index.commit(f"Update from base {cod}")
-#            logging.debug("Commit on branch")
-
+            head = self.checkout_conf(generator, release=release_tag)
+            ## merge xtheirs
+            self.repo.git.merge("-Xtheirs", "base/"+cod)
+            logging.info(f"Merge from base {cod}")
+            self.commit(f"Merge from base {cod}")
 
         # run the generator
         ## link the module
@@ -181,15 +176,10 @@ class ConfPool :
             logging.info("No changes")
             # no new commit
         else:
-            file_list = files.split('\n')
-            logging.debug("Files that changed: "+", ".join(file_list))
-            for f in file_list :
-                self.repo.git.add(f)
-            # commit
-            self.repo.git.commit("-m", f"Execute {generator}")
+            self.commit(f"Execute {generator}")
 
         # push the branch
-        self.operation.push(f"{ref_name}:{ref_name}")
+        self.operation.push(f"{ref_name}")
         return res
 
         
@@ -209,7 +199,21 @@ class ConfPool :
         for g in generators :
             if conf_regex.match(g) :
                 self.generate_conf(cod=cod, generator=g, release_tag=release_tag)
-            
+
+    def commit(self, message:str) :
+        # find the changes
+        files = self.repo.git.diff(None, name_only=True)
+        if not files :
+            return
+
+        file_list = files.split('\n')
+        logging.debug("Files that changed: "+", ".join(file_list))
+        for f in file_list :
+            self.repo.git.add(f)
+        # commit
+        self.repo.git.commit("-m", message)
+    
+    
 #    def tag( self,
 #             base_ref,
 #             key_regex ) -> list :
