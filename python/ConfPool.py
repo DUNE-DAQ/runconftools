@@ -60,7 +60,8 @@ class ConfPool :
             return None
 
         ref_name = cod
-        head = self.repo.create_head(ref_name, self.base.refs[ref_name]).set_tracking_branch(self.base.refs[ref_name]).checkout()
+        local_name = ref_name+"/LOCAL"
+        head = self.repo.create_head(local_name, self.base.refs[ref_name]).set_tracking_branch(self.base.refs[ref_name]).checkout()
         self.setup_conf_path()
         return head
 
