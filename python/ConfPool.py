@@ -171,7 +171,7 @@ class ConfPool :
         res = functor(self.repo.working_dir)
 
         # commit
-        self.repo.index.commit("Execute "+generator)
+        self.repo.git.commit(message="Execute "+generator)
         
         # push the branch
         self.operation.push(ref_name)
