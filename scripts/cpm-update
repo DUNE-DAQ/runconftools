@@ -6,7 +6,7 @@ import click
 import logging
 import os
 import re
-from ConfPool import ConfPool
+from config_management.ConfPool import ConfPool
 
 
 CONTEXT_SETTINGS = dict(help_option_names=['-h', '--help'])
