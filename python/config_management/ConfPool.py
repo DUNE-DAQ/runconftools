@@ -7,7 +7,6 @@ import logging
 import re
 import sys
 import importlib
-import sh
 
 class ConfPool :
     def __init__( self,
@@ -170,14 +169,15 @@ class ConfPool :
         ## execute the function
         res = functor(self.repo.working_dir)
 
+        
         # find changed files
-        files = self.repo.git.diff(None, name_only=True)
-        if not files :
-            logging.info("No changes")
-            # no new commit
-        else:
-            self.commit(f"Execute {generator}")
+        self.commit(f"Execute {generator}")
 
+        # remove the generators
+        removed = self.repo.index.remove(["generators"], r=True, working_tree = True)
+        logging.debug("Removing: "+", ".join(removed))
+        self.repo.git.commit("-m", "Removing generators")
+        
         # push the branch
         self.operation.push(f"{ref_name}")
         return res
