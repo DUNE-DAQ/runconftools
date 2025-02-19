@@ -58,6 +58,12 @@ class ConfPool :
             logging.error("%s not in the avilable CODs",cod)
             return None
 
+        if cod == "develop" :
+            branches = [b.name for b in self.repo.branches]
+            if cod in branches :
+                self.repo.create_head("___DUMMU_BRANCH___").checkout()
+                self.repo.delete_head(cod, force=True)
+        
         ref_name = cod
         local_name = ref_name+"/LOCAL"
         head = self.repo.create_head(local_name, self.base.refs[ref_name]).set_tracking_branch(self.base.refs[ref_name]).checkout()
@@ -153,11 +159,15 @@ class ConfPool :
         else :
             logging.warning(f"Configuration {generator} overrides existing operation branch")
             head = self.checkout_conf(generator, release=release_tag)
-            ## merge xtheirs
-            self.repo.git.merge("-Xtheirs", "base/"+cod)
-            logging.info(f"Merge from base {cod}")
-            self.commit(f"Merge from base {cod}")
+            # whipe out the branch
+            files = self.repo.index.remove(["."], r=True, working_tree = True)
+            logging.debug("Removing "+", ".join(files))
+            self.repo.git.commit("-m", "Clean branch")
+            self.repo.git.checkout(f"base/{cod}", ".")
+            logging.info(f"Restore from base {cod}")
+            self.repo.git.commit("-m", f"Restore from base {cod}")
 
+       
         # run the generator
         ## link the module
         module_name = self.apparatus+'.'+generator
