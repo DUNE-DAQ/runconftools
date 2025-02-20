@@ -8,6 +8,7 @@ import re
 import sys
 import importlib
 
+
 class ConfPool :
     def __init__( self,
                   path,
@@ -58,15 +59,27 @@ class ConfPool :
             logging.error("%s not in the avilable CODs",cod)
             return None
 
+        ## this protection is necessary in case develop exist by default
+        ## In principle this could be done on any branch that does not respect the branch structure
+        ## But I prefer to have the error exposed and deal with the specifics in a case by case manner
+        dymmy_branch = "____DUMMY_BRANCH____"
         if cod == "develop" :
             branches = [b.name for b in self.repo.branches]
             if cod in branches :
-                self.repo.create_head("___DUMMU_BRANCH___").checkout()
+                self.repo.create_head("____DUMMY_BRANCH____").checkout()
                 self.repo.delete_head(cod, force=True)
-        
+
+        ## as all the local branches will be in the form <version>/<generator> we need a name for the
+        ## base. This is the way we are going to store the base
         ref_name = cod
-        local_name = ref_name+"/LOCAL"
+        local_name = ref_name+"/____BASE____"
         head = self.repo.create_head(local_name, self.base.refs[ref_name]).set_tracking_branch(self.base.refs[ref_name]).checkout()
+
+        ## clean up dummies created to fix default branches
+        branches = [b.name for b in self.repo.branches]
+        if dymmy_branch in branches :
+            self.repo.delete_head(dymmy_branch, force=True)
+        
         self.setup_conf_path()
         return head
 
@@ -137,7 +150,8 @@ class ConfPool :
     def generate_conf( self,
                        cod:str,
                        generator:str,
-                       release_tag:str=None ) -> bool :
+                       release_tag:str=None,
+                       log_message:str=None) -> bool :
 
         if not release_tag:
             release_tag = cod
@@ -165,9 +179,14 @@ class ConfPool :
             self.repo.git.commit("-m", "Clean branch")
             self.repo.git.checkout(f"base/{cod}", ".")
             logging.info(f"Restore from base {cod}")
-            self.repo.git.commit("-m", f"Restore from base {cod}")
+            message = ""
+            if log_message :
+                message = f"Restore from base {cod}: {log_message}"
+            else :
+                message = f"Restore from base {cod}"
+            #self.repo.git.add(["."])
+            self.repo.git.commit("-m", message)
 
-       
         # run the generator
         ## link the module
         module_name = self.apparatus+'.'+generator
@@ -179,15 +198,8 @@ class ConfPool :
         ## execute the function
         res = functor(self.repo.working_dir)
 
-        
-        # find changed files
         self.commit(f"Execute {generator}")
 
-        # remove the generators
-        removed = self.repo.index.remove(["generators"], r=True, working_tree = True)
-        logging.debug("Removing: "+", ".join(removed))
-        self.repo.git.commit("-m", "Removing generators")
-        
         # push the branch
         self.operation.push(f"{ref_name}")
         return res
@@ -196,7 +208,7 @@ class ConfPool :
     def propagate_cod( self,
                        cod:str,
                        release_tag=None,
-                       conf_regex:re.Pattern=re.compile(".*") ):
+                       conf_regex:re.Pattern=re.compile(".*")):
 
         if not release_tag:
             release_tag = cod
@@ -204,11 +216,16 @@ class ConfPool :
         cod_head = self.checkout_cod(cod)
         if not cod_head :
             return
-        
+
+        ## find the log
+        message = self.base.refs[cod].commit.message
+
         generators = self.get_generators(cod)
         for g in generators :
             if conf_regex.match(g) :
-                self.generate_conf(cod=cod, generator=g, release_tag=release_tag)
+                self.generate_conf(cod=cod, generator=g,
+                                   release_tag=release_tag,
+                                   log_message=message)
 
     def commit(self, message:str) :
         # find the changes
