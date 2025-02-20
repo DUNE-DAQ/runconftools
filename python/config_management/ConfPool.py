@@ -52,7 +52,7 @@ class ConfPool :
         os.environ["DUNEDAQ_DB_PATH"] = f"{self.repo.working_dir}:{os.environ.get('DUNEDAQ_DB_PATH', '')}"
         
     def checkout_cod( self,
-                      cod) -> git.refs.head.Head :
+                      cod:str) -> git.refs.head.Head :
         
         cods = self.get_cods()
         if cod not in cods :
