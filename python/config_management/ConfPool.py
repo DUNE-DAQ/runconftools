@@ -36,6 +36,16 @@ class ConfPool :
                 logging.info("%s -> %s", r.name, r.url)
             sys.path.append(path+'/generators')
 
+        ## this protection is necessary in case local cods exist, example develop which is created by default
+        ## In principle this could be done on any branch that does not respect the branch structure
+        ## But I prefer to have the error exposed and deal with the specifics in a case by case manner
+        cods = self.get_cods()
+        branches = [b.name for b in self.repo.branches]
+        for c in cods :
+            if c in branches :
+                self.repo.refs[c].rename(f"{c}/____BASE____")
+
+            
         
     def get_cods( self ) -> list[str] :
         self.base.fetch()
@@ -59,15 +69,6 @@ class ConfPool :
             logging.error("%s not in the avilable CODs",cod)
             return None
 
-        ## this protection is necessary in case develop exist by default
-        ## In principle this could be done on any branch that does not respect the branch structure
-        ## But I prefer to have the error exposed and deal with the specifics in a case by case manner
-        dymmy_branch = "____DUMMY_BRANCH____"
-        if cod == "develop" :
-            branches = [b.name for b in self.repo.branches]
-            if cod in branches :
-                self.repo.create_head("____DUMMY_BRANCH____").checkout()
-                self.repo.delete_head(cod, force=True)
 
         ## as all the local branches will be in the form <version>/<generator> we need a name for the
         ## base. This is the way we are going to store the base
@@ -75,11 +76,6 @@ class ConfPool :
         local_name = ref_name+"/____BASE____"
         head = self.repo.create_head(local_name, self.base.refs[ref_name]).set_tracking_branch(self.base.refs[ref_name]).checkout()
 
-        ## clean up dummies created to fix default branches
-        branches = [b.name for b in self.repo.branches]
-        if dymmy_branch in branches :
-            self.repo.delete_head(dymmy_branch, force=True)
-        
         self.setup_conf_path()
         return head
 
