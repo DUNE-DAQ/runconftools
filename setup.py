@@ -9,4 +9,6 @@ setup(
         "GitPython",
         "sh",
     ],
-    extras_require={"develop": ["ipdb", "ipython"]},
+    extras_require={"develop": ["ipdb", "ipython"]}
+)
+

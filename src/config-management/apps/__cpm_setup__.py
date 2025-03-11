@@ -6,7 +6,7 @@ import click
 import logging
 import os
 import re
-from config_management.ConfPool import ConfPool
+from config-management.ConfPool import ConfPool
 
 
 CONTEXT_SETTINGS = dict(help_option_names=['-h', '--help'])
@@ -23,7 +23,7 @@ CONTEXT_SETTINGS = dict(help_option_names=['-h', '--help'])
 
 
 
-def cli(path, apparatus, base, operation, release, conf, debug) :
+def main(path, apparatus, base, operation, release, conf, debug) :
 
     logging.basicConfig(
         format="%(asctime)s %(levelname)-8s %(message)s",
@@ -49,4 +49,4 @@ def cli(path, apparatus, base, operation, release, conf, debug) :
         pool.checkout_conf(release=release, conf=conf)
     
 if __name__ == '__main__':
-    cli(show_default=True, standalone_mode=True)
+    main(show_default=True, standalone_mode=True)
