@@ -12,6 +12,9 @@ Requires-Dist: sh
 Provides-Extra: develop
 Requires-Dist: ipdb; extra == "develop"
 Requires-Dist: ipython; extra == "develop"
+Requires-Dist: ruff; extra == "develop"
+Requires-Dist: pre-commit; extra == "develop"
+Requires-Dist: pytest; extra == "develop"
 Dynamic: provides-extra
 Dynamic: requires-dist
 

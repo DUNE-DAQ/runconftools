@@ -7,3 +7,6 @@ sh
 [develop]
 ipdb
 ipython
+ruff
+pre-commit
+pytest
