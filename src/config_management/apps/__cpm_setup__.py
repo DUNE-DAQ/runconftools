@@ -8,7 +8,7 @@ import os
 import re
 
 from config_management.ConfPool import ConfPool
-# CONTEXT_SETTINGS = dict(help_option_names=['-h', '--help'])
+
 
 
 def cli(path, apparatus, base, operation, release, conf, debug):
@@ -40,7 +40,7 @@ def cli(path, apparatus, base, operation, release, conf, debug):
         pool.checkout_conf(release=release, conf=conf)
 
 
-@click.command()  # context_settings=CONTEXT_SETTINGS)
+@click.command(context_settings={'show_default': True})
 @click.argument("path", type=click.Path(exists=True, file_okay=False, writable=True))
 @click.option("-a", "--apparatus", type=click.STRING, default="np02")
 @click.option(
@@ -78,4 +78,4 @@ def main(
     """
     cli(
         path, apparatus, base, operation, release, conf, debug
-    )  # show_default=True, standalone_mode=True
+    ) 

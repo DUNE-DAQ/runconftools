@@ -8,10 +8,10 @@ import os
 import re
 
 from config_management.ConfPool import ConfPool
-# CONTEXT_SETTINGS = dict(help_option_names=['-h', '--help'])
 
 
-def main(path, apparatus, base, operation, cod, release, conf, debug):
+
+def cli(path, apparatus, base, operation, cod, release, conf, debug):
     logging.basicConfig(
         format="%(asctime)s %(levelname)-8s %(message)s",
         level=logging.DEBUG if debug else logging.INFO,
@@ -21,7 +21,7 @@ def main(path, apparatus, base, operation, cod, release, conf, debug):
     pool.propagate_cod(cod=cod, release_tag=release, conf_regex=re.compile(conf))
 
 
-@click.command()  # context_settings=CONTEXT_SETTINGS)
+@click.command(context_settings={'show_default': True}) 
 @click.argument("path", type=click.Path(exists=True, file_okay=False, writable=True))
 @click.option("-a", "--apparatus", type=click.STRING, default="np02")
 @click.option(
@@ -61,4 +61,5 @@ def main(
     """
     cli(
         path, apparatus, base, operation, cod, release, conf, debug
-    )  # (show_default=True, standalone_mode=True)
+    ) 
+
