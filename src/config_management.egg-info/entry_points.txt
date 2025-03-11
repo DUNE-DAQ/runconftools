@@ -1,0 +1,3 @@
+[console_scripts]
+cpm-setup = config_management.apps.__cpm_setup__:main
+cpm-update = config_management.apps.__cpm_update__:main

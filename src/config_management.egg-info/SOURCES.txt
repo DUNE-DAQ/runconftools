@@ -1,0 +1,14 @@
+setup.cfg
+setup.py
+docs/README.md
+src/config_management/ConfPool.py
+src/config_management/__init__.py
+src/config_management.egg-info/PKG-INFO
+src/config_management.egg-info/SOURCES.txt
+src/config_management.egg-info/dependency_links.txt
+src/config_management.egg-info/entry_points.txt
+src/config_management.egg-info/requires.txt
+src/config_management.egg-info/top_level.txt
+src/config_management/apps/__cpm_setup__.py
+src/config_management/apps/__cpm_update__.py
+src/config_management/apps/__init__.py

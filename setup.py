@@ -7,8 +7,8 @@ setup(
         "click",
         "click-shell",
         "GitPython",
+        "rich",
         "sh",
     ],
-    extras_require={"develop": ["ipdb", "ipython"]}
+    extras_require={"develop": ["ipdb", "ipython", "ruff", "pre-commit", "pytest"]},
 )
-

@@ -1,0 +1,9 @@
+click
+click-shell
+GitPython
+rich
+sh
+
+[develop]
+ipdb
+ipython
