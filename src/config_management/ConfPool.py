@@ -86,7 +86,7 @@ class ConfPool:
             .set_tracking_branch(self.base.refs[ref_name])
             .checkout()
         )
-
+        self.base.pull(f"{ref_name}:{local_name}")
         self.setup_conf_path()
         return head
 
@@ -161,6 +161,7 @@ class ConfPool:
             .set_tracking_branch(self.operation.refs[ref_name])
             .checkout()
         )
+        self.operation.pull(f"{ref_name}")
         self.setup_conf_path()
         return head
 
