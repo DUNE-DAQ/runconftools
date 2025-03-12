@@ -278,10 +278,13 @@ class ConfPool:
         generators = self.get_generators(base)
         for g in generators:
             if conf_regex.match(g):
-                self.generate_conf(
-                    base=base, generator=g, release_tag=release_tag,
-                    log_message=message, no_push=no_push
-                )
+                try :
+                    self.generate_conf(
+                        base=base, generator=g, release_tag=release_tag,
+                        log_message=message, no_push=no_push
+                    )
+                except Exception as e:
+                    logging.error(f"Exception raised when trying to generate {g}: {e}")
 
     def push_configurations(self,
                             base:str,
