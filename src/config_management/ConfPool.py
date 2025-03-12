@@ -103,6 +103,22 @@ class ConfPool:
                         files.append(match.group(1))
         return files
 
+    def get_verifiers(self, base: str = None) -> list[str]:
+        regex = re.compile("(.*)\.py$")
+        if base :
+            self.checkout_base(base)
+            ## otherwise just get the verifiers from the current branch
+            
+        files = []
+        path = self.repo.working_dir + "/functions/verifiers"
+        if os.path.isdir(path):
+            for f in os.listdir(path):
+                if os.path.isfile(os.path.join(path, f)):
+                    match = regex.match(f)
+                    if match:
+                        files.append(match.group(1))
+        return files
+
     def get_daq_versions(self) -> list[str]:
         self.operation.fetch()
         branches = [r.name for r in self.operation.refs]
@@ -221,13 +237,19 @@ class ConfPool:
 
         if not res:
             return res
+
+        ## verfication
+        very = self.verify()
+        if not very :
+            logging.error(f"Verfication failed for {generator}")
+            return 
         
         ## validate
         if hasattr(module, "validate"):
             valctor = getattr(module, "validate")
             res = valctor(self.repo.working_dir)
             if not res :
-                logging.info(f"Validation failed for {generator}")
+                logging.error(f"Validation failed for {generator}")
                 return res
         else:
             logging.warning(f"{generator} has no validation")
@@ -281,7 +303,24 @@ class ConfPool:
                 if ref_name in local_branches :
                     logging.info(f"Pushing {ref_name} to {self.apparatus} operations")
                     self.operation.push(f"{ref_name}")
-                            
+
+    def verify(self) -> bool :
+        verifiers = self.get_verifiers()
+        if not verifiers :
+            logging.warning("No verfiers are available")
+        for v in verifiers:
+            module_name = "verifiers."+v
+            module = importlib.import_module(module_name)
+            functor = getattr(module, "verify")
+            res = functor(self.repo.working_dir)
+            if not res :
+                logging.error(f"{v} failed")
+                return False
+            
+        return True
+            
+        
+        
     def commit(self, message: str):
         # find the changes
         files = self.repo.git.diff(None, name_only=True)
