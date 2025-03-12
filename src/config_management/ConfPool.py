@@ -165,7 +165,8 @@ class ConfPool:
         return head
 
     def generate_conf(
-        self, base: str, generator: str, release_tag: str = None, log_message: str = None
+            self, base: str, generator: str,
+            release_tag: str = None, log_message: str = None, no_push:bool = False
     ) -> bool:
         if not release_tag:
             release_tag = base
@@ -216,11 +217,15 @@ class ConfPool:
         self.commit(f"Execute {generator}")
 
         # push the branch
-        self.operation.push(f"{ref_name}")
+        if not no_push :
+            self.operation.push(f"{ref_name}")
+            
         return res
 
     def propagate_base(
-        self, base: str, release_tag=None, conf_regex: re.Pattern = re.compile(".*")
+        self, base: str, release_tag:str=None,
+            conf_regex: re.Pattern = re.compile(".*"),
+            no_push:bool = False
     ):
         if not release_tag:
             release_tag = base
@@ -236,9 +241,31 @@ class ConfPool:
         for g in generators:
             if conf_regex.match(g):
                 self.generate_conf(
-                    base=base, generator=g, release_tag=release_tag, log_message=message
+                    base=base, generator=g, release_tag=release_tag,
+                    log_message=message, no_push=no_push
                 )
 
+    def push_configurations(self,
+                            base:str,
+                            release_tag:str = None,
+                            conf_regex: re.Pattern = re.compile(".*") ) :
+
+        if not release_tag:
+            release_tag = base
+            
+        base_head = self.checkout_base(base)
+        if not base_head:
+            return
+
+        generators = self.get_generators(base)
+        local_branches = [b.name for b in self.repo.branches]
+        for g in generators:
+            if conf_regex.match(g):
+                ref_name = f"{release_tag}/{g}"
+                if ref_name in local_branches :
+                    logging.info(f"Pushing {ref_name} to {self.apparatus} operations")
+                    self.operation.push(f"{ref_name}")
+                            
     def commit(self, message: str):
         # find the changes
         files = self.repo.git.diff(None, name_only=True)
