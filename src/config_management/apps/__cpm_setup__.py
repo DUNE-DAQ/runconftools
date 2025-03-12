@@ -14,14 +14,12 @@ from config_management.ConfPool import ConfPool
 @click.argument("path", type=click.Path(exists=True, file_okay=False, writable=True))
 @click.option("-a", "--apparatus", type=click.STRING, default="np02")
 @click.option(
-    "-b",
-    "--base",
+    "--base_url",
     type=click.STRING,
     default="ssh://git@gitlab.cern.ch:7999/dune-daq/online/ehn1-daqconfigs.git",
 )
 @click.option(
-    "-o",
-    "--operation",
+    "--operation_url",
     type=click.STRING,
     default="ssh://git@gitlab.cern.ch:7999/dune-daq/online/np02-configs-operation.git",
 )
@@ -34,7 +32,7 @@ from config_management.ConfPool import ConfPool
     is_flag=True,
     help="Set debug print levels",
 )
-def main(path, apparatus, base, operation, release, conf, debug):
+def main(path, apparatus, base_url, operation_url, release, conf, debug):
 
     """
     Add a docstring
@@ -45,10 +43,10 @@ def main(path, apparatus, base, operation, release, conf, debug):
                          datefmt="%Y-%m-%d %H:%M:%S",
     )
 
-    pool = ConfPool(path, operation_url=operation, base_url=base)
+    pool = ConfPool(path, operation_url=operation_url, base_url=base_url)
 
-    cods = pool.get_cods()
-    logging.info("Available CODs: {}".format(", ".join(cods)))
+    bases = pool.get_base_branches()
+    logging.info("Available baess: {}".format(", ".join(bases)))
 
     versions = pool.get_daq_versions()
     logging.info(
@@ -57,7 +55,7 @@ def main(path, apparatus, base, operation, release, conf, debug):
         )
     )
 
-    gens = pool.get_generators(cod=release)
+    gens = pool.get_generators(base=release)
     logging.info("Available Generators: {}".format(", ".join(gens)))
 
     confs = pool.get_confs(release=re.compile(release))
