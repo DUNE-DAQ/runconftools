@@ -42,7 +42,7 @@ class ConfPool:
         branches = [b.name for b in self.repo.branches]
         for b in bases:
             if b in branches:
-                self.repo.refs[c].rename(f"{c}/____BASE____")
+                self.repo.refs[b].rename(f"{b}/____BASE____")
 
     def get_base_branches(self) -> list[str]:
         self.base.fetch()
