@@ -33,7 +33,7 @@ class ConfPool:
             logging.info("Repo in %s set with the following remotes:", path)
             for r in self.repo.remotes:
                 logging.info("%s -> %s", r.name, r.url)
-            sys.path.append(path + "/generators")
+            sys.path.append(path + "/functions")
 
         ## this protection is necessary in case local base branch exist, example develop which is created by default
         ## In principle this could be done on any branch that does not respect the branch structure
@@ -94,7 +94,7 @@ class ConfPool:
         regex = re.compile("(.*)\.py$")
         self.checkout_base(base)
         files = []
-        path = self.repo.working_dir + "/generators/" + self.apparatus
+        path = self.repo.working_dir + "/functions/generators/" + self.apparatus
         if os.path.isdir(path):
             for f in os.listdir(path):
                 if os.path.isfile(os.path.join(path, f)):
@@ -206,17 +206,32 @@ class ConfPool:
 
         # run the generator
         ## link the module
-        module_name = self.apparatus + "." + generator
+        module_name = "generators."+self.apparatus + "." + generator
         module = importlib.import_module(module_name)
 
         ## get the function
-        functor = getattr(module, "generate")
+        genctor = getattr(module, "generate")
 
         ## execute the function
-        res = functor(self.repo.working_dir)
+        res = genctor(self.repo.working_dir)
 
+        ## we commmit even if the result is false because having the local result
+        ## might be useful for debugging
         self.commit(f"Execute {generator}")
 
+        if not res:
+            return res
+        
+        ## validate
+        if hasattr(module, "validate"):
+            valctor = getattr(module, "validate")
+            res = valctor(self.repo.working_dir)
+            if not res :
+                logging.info(f"Validation failed for {generator}")
+                return res
+        else:
+            logging.warning(f"{generator} has no validation")
+        
         # push the branch
         if not no_push :
             self.operation.push(f"{ref_name}")
