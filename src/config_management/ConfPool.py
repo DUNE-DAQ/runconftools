@@ -47,7 +47,7 @@ class ConfPool:
     @staticmethod
     def get_release(default:str = "develop") -> str :
         name = os.environ["SPACK_RELEASE"]
-        regex = re.compile("^([^-]+-.*)-[^-]+-[0-9]+$")
+        regex = re.compile("^([^-]+-v[0-9]+\.[0-9]+\.[0-9]+[^-]*)-[^-]+-[0-9]+$")
         match = regex.match(name)
         if match :
             return match.group(1)
