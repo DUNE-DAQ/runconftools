@@ -14,19 +14,17 @@ from config_management.ConfPool import ConfPool
 @click.argument("path", type=click.Path(exists=True, file_okay=False, writable=True))
 @click.option("-a", "--apparatus", type=click.STRING, default="np02")
 @click.option(
-    "-b",
-    "--base",
+    "--base_url",
     type=click.STRING,
     default="ssh://git@gitlab.cern.ch:7999/dune-daq/online/ehn1-daqconfigs.git",
 )
 @click.option(
-    "-o",
-    "--operation",
+    "--operation_url",
     type=click.STRING,
     default="ssh://git@gitlab.cern.ch:7999/dune-daq/online/np02-configs-operation.git",
 )
-@click.option("-c", "--cod", type=click.STRING, default=os.environ["SPACK_RELEASE"])
-@click.option("-r", "--release", type=click.STRING, default=os.environ["SPACK_RELEASE"])
+@click.option("-b", "--base", type=click.STRING, default = ConfPool.get_release() )
+@click.option("-r", "--release", type=click.STRING, default = ConfPool.get_release() )
 @click.option("--conf", type=click.STRING, default=".*")
 @click.option(
     "--debug",
@@ -35,7 +33,7 @@ from config_management.ConfPool import ConfPool
     is_flag=True,
     help="Set debug print levels",
 )
-def main(path, apparatus, base, operation, cod, release, conf, debug):
+def main(path, apparatus, base_url, operation_url, base, release, conf, debug):
 
     """
     Add a docstring
@@ -46,7 +44,7 @@ def main(path, apparatus, base, operation, cod, release, conf, debug):
         level=logging.DEBUG if debug else logging.INFO,
         datefmt="%Y-%m-%d %H:%M:%S",
     )
-    pool = ConfPool(path, operation_url=operation, base_url=base)
-    pool.propagate_cod(cod=cod, release_tag=release, conf_regex=re.compile(conf))
+    pool = ConfPool(path, operation_url=operation_url, base_url=base_url)
+    pool.propagate_base(base=base, release_tag=release, conf_regex=re.compile(conf))
 
 
