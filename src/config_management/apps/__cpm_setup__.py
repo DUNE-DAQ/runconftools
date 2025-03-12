@@ -23,7 +23,7 @@ from config_management.ConfPool import ConfPool
     type=click.STRING,
     default="ssh://git@gitlab.cern.ch:7999/dune-daq/online/np02-configs-operation.git",
 )
-@click.option("-r", "--release", type=click.STRING, default=os.environ["SPACK_RELEASE"])
+@click.option("-r", "--release", type=click.STRING, default = ConfPool.get_release())
 @click.option("-c", "--conf", type=click.STRING, default=None)
 @click.option(
     "--debug",

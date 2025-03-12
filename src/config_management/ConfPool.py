@@ -44,6 +44,16 @@ class ConfPool:
             if b in branches:
                 self.repo.refs[b].rename(f"{b}/____BASE____")
 
+    @staticmethod
+    def get_release(default:str = "develop") -> str :
+        name = os.environ["SPACK_RELEASE"]
+        regex = re.compile("^([^-]+-.*)-[^-]+-[0-9]+$")
+        match = regex.match(name)
+        if match :
+            return match.group(1)
+        else :
+            return default
+                
     def get_base_branches(self) -> list[str]:
         self.base.fetch()
         branches = [r.name for r in self.base.refs]
@@ -108,9 +118,13 @@ class ConfPool:
 
     def get_confs(
         self,
-        release: re.Pattern = re.compile(os.environ["SPACK_RELEASE"]),
+        release: re.Pattern = None,
         regex: re.Pattern = re.compile(".*"),
     ) -> list:
+
+        if not release :
+            release = re.compile(self.get_release())
+            
         self.operation.fetch()
         branches = [r.name for r in self.operation.refs]
         confs = []
@@ -130,8 +144,12 @@ class ConfPool:
         return confs
 
     def checkout_conf(
-        self, conf: str, release: str = os.environ["SPACK_RELEASE"]
+         self, conf: str, release: str = None,
     ) -> git.refs.head.Head:
+
+        if not release :
+            release =  self.get_release()
+            
         confs = self.get_confs(release=re.compile(release))
         if conf not in confs:
             logging.error("%s not in the configurations for %s", conf, release)
