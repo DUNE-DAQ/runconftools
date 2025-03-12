@@ -263,6 +263,7 @@ class ConfPool:
             if conf_regex.match(g):
                 ref_name = f"{release_tag}/{g}"
                 if ref_name in local_branches :
+                    logging.info(f"Pushing {ref_name} to {self.apparatus} operations")
                     self.operation.push(f"{ref_name}")
                             
     def commit(self, message: str):

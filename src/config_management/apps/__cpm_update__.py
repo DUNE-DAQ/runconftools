@@ -26,6 +26,8 @@ from config_management.ConfPool import ConfPool
 @click.option("-b", "--base", type=click.STRING, default = ConfPool.get_release() )
 @click.option("-r", "--release", type=click.STRING, default = ConfPool.get_release() )
 @click.option("--conf", type=click.STRING, default=".*")
+@click.option("--push-only", type=click.BOOL, default=False, is_flag=True,
+              help="When set, it only pushes local branches, without regenerating")
 @click.option("--no-push", type=click.BOOL, default=False, is_flag=True,
               help="Executes the generators only on local branches without pushing")
 
@@ -36,7 +38,7 @@ from config_management.ConfPool import ConfPool
     is_flag=True,
     help="Set debug print levels",
 )
-def main(path, apparatus, base_url, operation_url, base, release, conf, no_push, debug):
+def main(path, apparatus, base_url, operation_url, base, release, conf, push_only, no_push, debug):
 
     """
     Add a docstring
@@ -48,7 +50,9 @@ def main(path, apparatus, base_url, operation_url, base, release, conf, no_push,
         datefmt="%Y-%m-%d %H:%M:%S",
     )
     pool = ConfPool(path, operation_url=operation_url, base_url=base_url)
-    pool.propagate_base(base=base, release_tag=release, conf_regex=re.compile(conf), no_push=True)
+
+    if not push_only :
+        pool.propagate_base(base=base, release_tag=release, conf_regex=re.compile(conf), no_push=True)
 
     if not no_push :
         pool.push_configurations(base=base, release_tag=release, conf_regex=re.compile(conf))
