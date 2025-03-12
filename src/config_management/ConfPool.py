@@ -123,7 +123,7 @@ class ConfPool:
     ) -> list:
 
         if not release :
-            release = re.compile(self.get_release())
+            release = re.compile("^"+self.get_release()+"$")
             
         self.operation.fetch()
         branches = [r.name for r in self.operation.refs]
