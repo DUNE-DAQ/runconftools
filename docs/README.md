@@ -9,7 +9,12 @@ For stable configurations, `<version>` is in the form of `fddaq-v5.2.2`, but in 
 The `<configuration_key>` is the name of the generator used to create the configuration. 
 
 ## Installation
-
+This is a python package, so just checkout the repo and call
+```bash
+cd config-management
+pip install [-e] .
+```
+Please remember that this requires the proxy from EHN1 machines. 
 
 ## Scripts 
 Experts interacting with the operation repository have just a few scripts that they can use. 
