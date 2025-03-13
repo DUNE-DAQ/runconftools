@@ -55,8 +55,39 @@ The information printed is:
 This is the script that takes the a base branche and propagates the changes to the operaiton repo, creating the necessary configurations. 
 
 ```bash
+Usage: cpm-update [OPTIONS] PATH
 
+  This script takes the a base branch and propagates the changes to the
+  operaiton repo, creating the necessary configurations.
+
+Options:
+  -a, --apparatus TEXT  [default: np02]
+  --base_url TEXT       [default: ssh://git@gitlab.cern.ch:7999/dune-
+                        daq/online/ehn1-daqconfigs.git]
+  --operation_url TEXT  [default: ssh://git@gitlab.cern.ch:7999/dune-
+                        daq/online/np02-configs-operation.git]
+  -b, --base TEXT       [default: fddaq-v5.2.2]
+  -r, --release TEXT    [default: fddaq-v5.2.2]
+  --conf TEXT           [default: .*]
+  --push-only           When set, it only pushes local branches, without
+                        regenerating
+  --no-push             Executes the generators only on local branches without
+                        pushing
+  --debug               Set debug print levels
+  --help                Show this message and exit.
 ```
 
+As for the setup, `PATH` has to be an existing location and has to be either empty or a valid `ehn1-configs` repository. 
+Be aware that if the directory contains a repostiories some local changes might be lost, so please push all the changes that are important. 
 
+The script starts checking out the required base. 
+Then, for every generator in the base, it creates the branches using the `release` option as `version` to be used in the branch name. 
+It is possible to select the generators to executed using a regex, with the option `conf`. 
+
+When generators are executed also all the verifiers are exectued and, if present, the validate associated to the generator is also executed. 
+If any of verifiers or validators fails, the branche is still created and committed, but they are not pushed to the operation. 
+This will allow local persistency to investigate the isuse. 
+
+It's possible to avoid the push altogether with the `--no-push` option. 
+That can be followed by a call with the `--push-only` that simply pushes the local branches corresponding to the existing generators. 
 
