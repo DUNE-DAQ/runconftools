@@ -24,6 +24,7 @@ from config_management.ConfPool import ConfPool
     default="ssh://git@gitlab.cern.ch:7999/dune-daq/online/np02-configs-operation.git",
 )
 @click.option("-r", "--release", type=click.STRING, default = ConfPool.get_release())
+@click.option("-b", "--base", type=click.STRING, default = None, help="If None, it's set equal to the release")
 @click.option("-c", "--conf", type=click.STRING, default=None)
 @click.option(
     "--debug",
@@ -32,10 +33,11 @@ from config_management.ConfPool import ConfPool
     is_flag=True,
     help="Set debug print levels",
 )
-def main(path, apparatus, base_url, operation_url, release, conf, debug):
+def main(path, apparatus, base_url, operation_url, release, base, conf, debug):
 
     """
-    Add a docstring
+    Set up a local repo and prints some informations. 
+    If the conf option is specified, the relevant configuration from operation is checked out for inspection. 
     """
 
     logging.basicConfig( format="%(asctime)s %(levelname)-8s %(message)s",
@@ -46,7 +48,7 @@ def main(path, apparatus, base_url, operation_url, release, conf, debug):
     pool = ConfPool(path, operation_url=operation_url, base_url=base_url)
 
     bases = pool.get_base_branches()
-    logging.info("Available baess: {}".format(", ".join(bases)))
+    logging.info("Available bases: {}".format(", ".join(bases)))
 
     versions = pool.get_daq_versions()
     logging.info(
@@ -55,7 +57,9 @@ def main(path, apparatus, base_url, operation_url, release, conf, debug):
         )
     )
 
-    gens = pool.get_generators(base=release)
+    if not base :
+        base = release
+    gens = pool.get_generators(base=base)
     logging.info("Available Generators: {}".format(", ".join(gens)))
 
     confs = pool.get_confs(release=re.compile(release))
