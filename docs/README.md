@@ -13,6 +13,7 @@ The `<configuration_key>` is the name of the generator used to create the config
 
 ## Scripts 
 Experts interacting with the operation repository have just a few scripts that they can use. 
+All the scrip names start with `cpm-` that stands for Configuration Pool Management.
 
 
 ### cpm-setup 
@@ -51,6 +52,11 @@ The information printed is:
  - The list of verifiers to be called once a configuration is generated.
 
 ### cpm-update
+This is the script that takes the a base branche and propagates the changes to the operaiton repo, creating the necessary configurations. 
+
+```bash
+
+```
 
 
 
