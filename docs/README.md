@@ -20,6 +20,11 @@ This is mostly a diagnostic scripts designed to setup a local area linked to bot
 
 ```bash
 Usage: cpm-setup [OPTIONS] PATH
+
+  Set up a local repo and prints some informations.  If the conf option is
+  specified, the relevant configuration from operation is checked out for
+  inspection.
+
 Options:
   -a, --apparatus TEXT  [default: np02]
   --base_url TEXT       [default: ssh://git@gitlab.cern.ch:7999/dune-
@@ -27,16 +32,24 @@ Options:
   --operation_url TEXT  [default: ssh://git@gitlab.cern.ch:7999/dune-
                         daq/online/np02-configs-operation.git]
   -r, --release TEXT    [default: fddaq-v5.2.2]
+  -b, --base TEXT
   -c, --conf TEXT
   --debug               Set debug print levels
   --help                Show this message and exit.
-
 ```
 
 The `PATH` has to be an existing location and has to be either empty or a valid `ehn1-configs` repository. 
 Be aware that if the directory contains a repostiories some local changes might be lost, so please push all the changes that are important. 
 
 The script simply sets up a git repository and prints some information about the release. 
+
+The information printed is:
+ - The list of available branches in the base, without any filtering;
+ - The list of available releases in operation;
+ - The list of available generators in the selected base;
+ - The list of configurations on operation for the selected release;
+ - The list of verifiers to be called once a configuration is generated.
+
 ### cpm-update
 
 
