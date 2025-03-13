@@ -65,8 +65,8 @@ def main(path, apparatus, base_url, operation_url, release, base, conf, debug):
     confs = pool.get_confs(release=re.compile(release))
     logging.info("Available Configurations: {}".format(", ".join(confs)))
 
-    verifiers = pool.get_verifiers(base=release)
-    logging.info("Available verfiers: {}".format(", ".join(verifiers)))
+    verifiers = pool.get_verifiers(base=base)
+    logging.info("Available verifiers: {}".format(", ".join(verifiers)))
     
     if conf:
         pool.checkout_conf(release=release, conf=conf)
