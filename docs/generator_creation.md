@@ -5,7 +5,7 @@ Once the generator is created the configuration is created by scripts.
 
 ## Generator structure
 Generators are stored in the base repo, as they are specific for the base that they have to work upon in order to create the necessary configuration. 
-Specifically, they are stored in the folder `functions/generators` directory in the subdirectory specific for the apparatus relevand for the generator. 
+Specifically, they are stored in the folder `functions/generators` directory in the subdirectory specific for the apparatus relevant for the generator. 
 
 Generators are python modules and are expected to be named with with `<configuration_name>.py`. 
 
@@ -19,20 +19,20 @@ This will be handled by the configuration management scripts.
 The generate function must return `True` once the generation is successfully completed. 
 Otherwise, it should return `False` or raise an exception. 
 
-A generator should assume that the environmental variable necessary to operate on the OKS files in the base, are correctly setup and should not try to set them. 
+A generator should assume that the environmental variables necessary to operate on the OKS files in the base are correctly setup and should not try to set them. 
 
 ### Good practices
 
 As the generator is a python script, one could do everything. 
 Yet it is recommended that the configuration files are managed through the OKS, conffwk or daqconf python interfaces/scripts. 
 
-It also recommended that we limit the change of the obejcts to just chaning the references rather than the attributes of the objecsts. 
+It also recommended that we limit the change of the objects to just changing the references rather than the attributes of the objects. 
 Although in some cases that might be unavoidable. 
 
 ## generator testing
 
-Generators should be tested before comming and before starging updating the operation repository. 
-In order to test the generator, it is recommendedthat that the generator contains the block
+Generators should be tested before committing and before starting updating the operation repository. 
+In order to test the generator, it is recommended that that the generator contains the block
 ```python
 if __name__ == '__main__':
     globals()["generate"](sys.argv[1])
@@ -45,11 +45,11 @@ python my_generator.py /path/to/base
 Or something very similar in spirit. 
 
 While developing, personal experience suggested that is quite useful to develop the generator initially saving the file outside the local base git repository. 
-In this way the chages made to the base by execting the generator can simply be reverted with a 
+In this way the chages made to the base by executing the generator can simply be reverted with a 
 ```bash
 (cd /path/to/base; git restore)
 ```
-Once the development is done and the result of the generator is tested, ideally with a succesful run, the file can be added to the base git repository, commited, pushed to the remote base and the operation repository can be updated. 
+Once the development is done and the result of the generator is tested, ideally with a succesful run, the file can be added to the base git repository, committed, pushed to the remote base and the operation repository can be updated. 
 
 ## Validators
 
@@ -58,7 +58,7 @@ Similarly to the generate function, the same file can contain - but it's not man
 def validate( path:str ) -> bool :
 ```
 function. 
-This is used to perform specific operations that validate the specific of that configuration. 
+This is used to perform specific operations that validate the validity of that configuration. 
 As the `generate` function, this is called by the configuration management scripts. 
 
 The function must return `True` in case the configuration is found to be correct by the function, or `False` otherwise. 
@@ -124,7 +124,7 @@ if __name__ == '__main__':
 
 ```
 
-This is an exampl of generators that uses both `daqconf` and `conffwk` scripts. 
-As you can see, most of the time, it is just changing the reference between the obejcts. 
-The only expection is the `FelixDataSender` class that it's part of the topology description of the connections. 
-Therefore its obejcts are not duplicated. 
+This is an example of a generator that uses both `daqconf` and `conffwk` scripts. 
+As you can see, most of the time, it is just changing the reference between the objects. 
+The only exception is the `FelixDataSender` class that it's part of the topology description of the connections. 
+Therefore its objects are not duplicated. 
