@@ -24,10 +24,13 @@ cd EHN1-configs
 git checkout fddaq-v5.2.2 -b mroda/my_dev
 ```
 At this point here you do the changes you need.
+
+### Some suggestions 
 If you need to develop a generator, I suggest you write the generator outside the local git repo so you can test the generator on the base.
 In case it's not ok, use a simple git restore to return the repository at its initial state. 
 Once you are happy with the generator, you can move the file inside the repo and add it to git.
 
+### Push review and testing 
 Whatever the changes you made, commit and push to a branch on the base repo.
 
 ```bash
@@ -59,10 +62,14 @@ If the local area has ended its purpose, just remove it:
 ```bash
 rm -rf TempTest
 ```
-As all the changes are not pushed should it be necessary. 
+All the changes are safe on remote repositories. 
 
 If all the branches are ok on the operation side, then all is well and we can merge, if not, we need to fix the merge request.
-Once the merge is done we just need to recreate the operation branches for the patch, but this time we push to 
+
+### Regeneration of the operation branches
+Once the merge is done we just need to recreate the operation branches for the patch, but this time we push to branches with the right version. 
+
+Most likely this is an operation done by run coornators. 
 
 ```bash
 mkdir Temp
@@ -71,6 +78,5 @@ cpm-update -b fddaq-v5.2.2 -r fddaq-v5.2.2 Temp
 ## And it might not be necessary to specify them.
 rm -rf Temp 
 ```
-
-If test branches were creating on the operation remote repository, those should be deleted.
+If test branches were created on the operation remote repository, those should be deleted.
 
