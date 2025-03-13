@@ -1,18 +1,19 @@
-# How to create a generator
+# How to create a new generator
 
-## generator structure
+Creating a configuration is almost the same as creating a generator for that configuration. 
+Once the generator is created the configuration is created by scripts. 
+
+## Generator structure
 Generators are stored in the base repo, as they are specific for the base that they have to work upon in order to create the necessary configuration. 
-Specifically, they are stored in the folder `generators` directory in the subdirectory specific for the apparatus relevand for the generator. 
+Specifically, they are stored in the folder `functions/generators` directory in the subdirectory specific for the apparatus relevand for the generator. 
 
-Generators are python modules and are expected to be named with with `<configuraiton_name>.py`. 
+Generators are python modules and are expected to be named with with `<configuration_name>.py`. 
 
 Generators will have to contains a generate function with signature
 ```python
-
 def generate( path:str ) -> bool :
-
 ```
-Where the incoming path is mandatory and is epexted to point to the location of the base repository on which the generator will act.
+Where the incoming path is mandatory and is expected to point to the location of the base repository on which the generator will act.
 This will be handled by the configuration management scripts. 
 
 The generate function must return `True` once the generation is successfully completed. 
@@ -50,6 +51,17 @@ In this way the chages made to the base by execting the generator can simply be 
 ```
 Once the development is done and the result of the generator is tested, ideally with a succesful run, the file can be added to the base git repository, commited, pushed to the remote base and the operation repository can be updated. 
 
+## Validators
+
+Similarly to the generate function, the same file can contain - but it's not mandatory - a 
+```Python
+def validate( path:str ) -> bool :
+```
+function. 
+This is used to perform specific operations that validate the specific of that configuration. 
+As the `generate` function, this is called by the configuration management scripts. 
+
+The function must return `True` in case the configuration is found to be correct by the function, or `False` otherwise. 
 
 ## Example
 
