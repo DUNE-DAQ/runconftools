@@ -83,7 +83,9 @@ Options:
 ```
 
 As for the setup, `PATH` has to be an existing location and has to be either empty or a valid `ehn1-configs` repository. 
-Be aware that if the directory contains a repostiories some local changes might be lost, so please push all the changes that are important. 
+Be aware that if the directory contains a repostiories some local changes might be lost. 
+For the update, it is recommended that a new directory is created for the operation. 
+It can be deleted once the propgation is complete. 
 
 The script starts checking out the required base. 
 Then, for every generator in the base, it creates the branches using the `release` option as `version` to be used in the branch name. 
