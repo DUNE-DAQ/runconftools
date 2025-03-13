@@ -23,11 +23,11 @@ git clone ssh://git@gitlab.cern.ch:7999/dune-daq/online/ehn1-daqconfigs.git EHN1
 cd EHN1-configs 
 git checkout fddaq-v5.2.2 -b mroda/my_dev
 ```
-At this point here you do the changes you need.
+At this point you can make the changes you need.
 
 ### Some suggestions 
 If you need to develop a generator, I suggest you write the generator outside the local git repo so you can test the generator on the base.
-In case it's not ok, use a simple git restore to return the repository at its initial state. 
+In case it's not ok, use a simple git restore to return the repository to its initial state. 
 Once you are happy with the generator, you can move the file inside the repo and add it to git.
 
 ### Push review and testing 
@@ -38,11 +38,11 @@ git commit . -m "My dev"
 git push origin mroda/my_dev
 ```
 
-At this point you open the merge request toward the branche you started from, in this case `fddaq-v5.2.2`.
+At this point you open the merge request towards the branch you started from, in this case `fddaq-v5.2.2`.
 Before the merge things should be tested and reviewed, if possible. 
 But the test depends on the type of changes. 
 If you just added a generator but the OKS objects in the base are unchanged, then there is no need to test all the generators.
-Assuming the new generator are tested by the developers, we can just merge.
+Assuming the new generator is tested by the developers, we can just merge.
 If there are changes in the OKS objects, we need to test that the generators are still functioning correctly.
 So before merging, I would test the generator doing the following:
 ```bash
@@ -58,7 +58,7 @@ In this case simply push with:
 ```bash
 cpm-update -b mroda/my_dev -r mroda-test --push-only TempTest
 ```
-If the local area has ended its purpose, just remove it:
+If the local area has served its purpose, just remove it:
 ```bash
 rm -rf TempTest
 ```
@@ -69,7 +69,7 @@ If all the branches are ok on the operation side, then all is well and we can me
 ### Regeneration of the operation branches
 Once the merge is done we just need to recreate the operation branches for the patch, but this time we push to branches with the right version. 
 
-Most likely this is an operation done by run coornators. 
+Most likely this is an operation done by run coordinators. 
 
 ```bash
 mkdir Temp
