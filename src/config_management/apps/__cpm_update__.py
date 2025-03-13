@@ -41,7 +41,7 @@ from config_management.ConfPool import ConfPool
 def main(path, apparatus, base_url, operation_url, base, release, conf, push_only, no_push, debug):
 
     """
-    Add a docstring
+    This script takes the a base branch and propagates the changes to the operaiton repo, creating the necessary configurations.
     """
 
     logging.basicConfig(
