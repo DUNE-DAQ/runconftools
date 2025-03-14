@@ -11,7 +11,8 @@ from config_management.ConfPool import ConfPool
 
 
 @click.command(context_settings={'show_default': True}) 
-@click.argument("path", type=click.Path(exists=True, file_okay=False, writable=True))
+@click.argument("path", type=click.Path(exists=True, file_okay=False, writable=True),
+                help="The local directory where things are executed and checkedout")
 @click.option("-a", "--apparatus",
               type=click.Choice(['np02', 'np04'], case_sensitive=True),
               default="np02", help="Selection of the apparatus")
@@ -19,19 +20,24 @@ from config_management.ConfPool import ConfPool
     "--base_url",
     type=click.STRING,
     default="ssh://git@gitlab.cern.ch:7999/dune-daq/online/ehn1-daqconfigs.git",
+    help="Git location of the remote base repo"
 )
 @click.option(
     "--operation_url",
     type=click.STRING,
     default=None,
+    help="Git location of the remote operation repo. If None, the repo is set according to the apparatus"
 )
-@click.option("-b", "--base", type=click.STRING, default = ConfPool.get_release() )
-@click.option("-r", "--release", type=click.STRING, default = ConfPool.get_release() )
-@click.option("--conf", type=click.STRING, default=".*")
+@click.option("-b", "--base", type=click.STRING, default = ConfPool.get_release(),
+              help="Base branch to be used as a starting point")
+@click.option("-r", "--release", type=click.STRING, default = ConfPool.get_release(),
+              help="Operation branch prefix for the generated branches")
+@click.option("--conf", type=click.STRING, default=".*",
+              help="Regex to select a subset of generators")
 @click.option("--push-only", type=click.BOOL, default=False, is_flag=True,
               help="When set, it only pushes local branches, without regenerating")
-@click.option("--no-push", type=click.BOOL, default=False, is_flag=True,
-              help="Executes the generators only on local branches without pushing")
+@click.option("-p", "--push", type=click.BOOL, default=False, is_flag=True,
+              help="Pushes the branhces, otherwise they are only created locally")
 
 @click.option(
     "--debug",
@@ -40,10 +46,11 @@ from config_management.ConfPool import ConfPool
     is_flag=True,
     help="Set debug print levels",
 )
-def main(path, apparatus, base_url, operation_url, base, release, conf, push_only, no_push, debug):
+def main(path, apparatus, base_url, operation_url, base, release, conf, push_only, push, debug):
 
     """
-    This script takes the a base branch and propagates the changes to the operaiton repo, creating the necessary configurations.
+    This script takes the a base branch and propagates the changes to the operation repo, creating the necessary configurations.
+    As a default, the branches are not pushed, use -p  or --push-only to perform the push
     """
 
     logging.basicConfig(
@@ -62,7 +69,7 @@ def main(path, apparatus, base_url, operation_url, base, release, conf, push_onl
     if not push_only :
         pool.propagate_base(base=base, release_tag=release, conf_regex=re.compile(conf), no_push=True)
 
-    if not no_push :
+    if push or push_only:
         pool.push_configurations(base=base, release_tag=release, conf_regex=re.compile(conf))
 
 
