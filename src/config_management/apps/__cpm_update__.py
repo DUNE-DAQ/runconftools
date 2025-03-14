@@ -11,8 +11,7 @@ from config_management.ConfPool import ConfPool
 
 
 @click.command(context_settings={'show_default': True}) 
-@click.argument("path", type=click.Path(exists=True, file_okay=False, writable=True),
-                help="The local directory where things are executed and checkedout")
+@click.argument("path", type=click.Path(exists=True, file_okay=False, writable=True))
 @click.option("-a", "--apparatus",
               type=click.Choice(['np02', 'np04'], case_sensitive=True),
               default="np02", help="Selection of the apparatus")

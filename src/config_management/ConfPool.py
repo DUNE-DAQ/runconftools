@@ -278,6 +278,10 @@ class ConfPool:
         generators = self.get_generators(base)
         for g in generators:
             if conf_regex.match(g):
+                logging.info("\n")
+                logging.info("---------------------------------------------")
+                logging.info(f"Generating {g}")
+                logging.info("---------------------------------------------")
                 try :
                     self.generate_conf(
                         base=base, generator=g, release_tag=release_tag,
