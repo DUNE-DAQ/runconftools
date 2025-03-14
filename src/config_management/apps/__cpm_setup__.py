@@ -12,16 +12,18 @@ from config_management.ConfPool import ConfPool
 
 @click.command(context_settings={'show_default': True})
 @click.argument("path", type=click.Path(exists=True, file_okay=False, writable=True))
-@click.option("-a", "--apparatus", type=click.STRING, default="np02")
+@click.option("-a", "--apparatus",
+              type=click.Choice(['np02', 'np04'], case_sensitive=True),
+              default="np02", help="Selection of the apparatus")
 @click.option(
     "--base_url",
     type=click.STRING,
-    default="ssh://git@gitlab.cern.ch:7999/dune-daq/online/ehn1-daqconfigs.git",
+    default="https://gitlab.cern.ch/dune-daq/online/ehn1-daqconfigs.git",
 )
 @click.option(
     "--operation_url",
     type=click.STRING,
-    default="ssh://git@gitlab.cern.ch:7999/dune-daq/online/np02-configs-operation.git",
+    default=None,
 )
 @click.option("-r", "--release", type=click.STRING, default = ConfPool.get_release())
 @click.option("-b", "--base", type=click.STRING, default = None, help="If None, it's set equal to the release")
@@ -45,6 +47,11 @@ def main(path, apparatus, base_url, operation_url, release, base, conf, debug):
                          datefmt="%Y-%m-%d %H:%M:%S",
     )
 
+    if not operation_url :
+        match apparatus :
+            case "np02" : operation_url = "https://gitlab.cern.ch/dune-daq/online/np02-configs-operation.git"
+            case "np04" : operation_url = "https://gitlab.cern.ch/dune-daq/online/np04-configs-operations.git"
+        
     pool = ConfPool(path, operation_url=operation_url, base_url=base_url)
 
     bases = pool.get_base_branches()
