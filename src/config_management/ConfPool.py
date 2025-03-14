@@ -327,7 +327,6 @@ class ConfPool:
         return True
             
         
-        
     def commit(self, message: str):
         # find the changes
         files = self.repo.git.diff(None, name_only=True)
@@ -341,6 +340,26 @@ class ConfPool:
         # commit
         self.repo.git.commit("-m", message)
 
+
+    def remove_conf(self,
+                    release:str=None,
+                    conf_regex: re.Pattern = re.compile(".*") ) -> list(str) :
+
+        versions = self.get_daq_versions()
+        
+        if not release:
+            logging.warning("No release specified, nothing is removed")
+            return []
+
+        if release not in versions :
+            logging.warning(f"{release} not among the available versions")
+            return []
+
+        confs = self.get_confs(release=re.compile("^"+release+"$"),
+                               regex=conf_regex)
+
+        for c in confs :
+            self.operation.push(f":{release}/{c}")
 
 #    def tag( self,
 #             base_ref,
