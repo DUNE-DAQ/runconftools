@@ -341,9 +341,9 @@ class ConfPool:
         self.repo.git.commit("-m", message)
 
 
-    def remove_conf(self,
-                    release:str=None,
-                    conf_regex: re.Pattern = re.compile(".*") ) -> list(str) :
+    def remove_configurations(self,
+                              release:str=None,
+                              conf_regex: re.Pattern = re.compile(".*") ) -> list[str] :
 
         versions = self.get_daq_versions()
         
@@ -357,9 +357,13 @@ class ConfPool:
 
         confs = self.get_confs(release=re.compile("^"+release+"$"),
                                regex=conf_regex)
-
+        ret = []
         for c in confs :
-            self.operation.push(f":{release}/{c}")
+            branch = f"{release}/{c}"
+            self.operation.push(f":{branch}")
+            ret.append(branch)
+
+        return ret
 
 #    def tag( self,
 #             base_ref,
