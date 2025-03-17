@@ -65,10 +65,15 @@ def main(path, apparatus, base_url, operation_url, base, release, conf, push_onl
 
     pool = ConfPool(path, operation_url=operation_url, base_url=base_url)
 
+    all_ok = True
     if not push_only :
-        pool.propagate_base(base=base, release_tag=release, conf_regex=re.compile(conf), no_push=True)
+        all_ok = pool.propagate_base(base=base, release_tag=release, conf_regex=re.compile(conf), no_push=True)
 
-    if push or push_only:
+
+    if (not all_ok) and push :
+        logging.fatal("Something went wrong in the generation phase so the push is not performed")
+        
+    if (push and all_ok) or push_only :
         pool.push_configurations(base=base, release_tag=release, conf_regex=re.compile(conf))
 
 

@@ -264,7 +264,7 @@ class ConfPool:
         self, base: str, release_tag:str=None,
             conf_regex: re.Pattern = re.compile(".*"),
             no_push:bool = False
-    ):
+    ) -> bool :    ## we return True if it's ok to proceed with a push because all went well
         if not release_tag:
             release_tag = base
 
@@ -276,6 +276,7 @@ class ConfPool:
         message = self.base.refs[base].commit.message
 
         generators = self.get_generators(base)
+        ret = True
         for g in generators:
             if conf_regex.match(g):
                 logging.info("\n")
@@ -283,12 +284,16 @@ class ConfPool:
                 logging.info(f"Generating {g}")
                 logging.info("---------------------------------------------")
                 try :
-                    self.generate_conf(
-                        base=base, generator=g, release_tag=release_tag,
-                        log_message=message, no_push=no_push
-                    )
+                    result = self.generate_conf( base=base, generator=g, release_tag=release_tag,
+                                                 log_message=message, no_push=no_push
+                                                )
+                    if not result :
+                        ret = False
                 except Exception as e:
                     logging.error(f"Exception raised when trying to generate {g}: {e}")
+                    ret = False
+                   
+        return ret
 
     def push_configurations(self,
                             base:str,
