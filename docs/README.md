@@ -1,7 +1,10 @@
 # config-management
 
-This python repository has the goal of interfacing with the operation repositories used to store the configurations used for runnning. 
+This python repository has the goal of interfacing with the operation repositories used to store the configurations used for runnning at EHN1. 
 As the configurations are generated from `ehn1-configs`, also known as the base repository, the scripts start from the base to construct the necessary operation branches, which are ultimately the configurations. 
+
+The functionality provided by this repository is meant for experts only.
+Shifters will use these interfaces indirectly via the shifter interface. 
 
 ## Configuration branches
 The branches on the operation repositories are named as `<version>/<configuration_key>`. 
