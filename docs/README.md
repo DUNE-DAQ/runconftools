@@ -53,7 +53,7 @@ Options:
                                daq/online/ehn1-daqconfigs.git]
   --operation_url TEXT
   -r, --release TEXT           [default: fddaq-v5.2.2]
-  -b, --base TEXT              If None, it's set equal to the release
+  -b, --base TEXT              If None, it is set equal to the release
   -c, --conf TEXT
   --debug                      Set debug print levels
   --help                       Show this message and exit.
