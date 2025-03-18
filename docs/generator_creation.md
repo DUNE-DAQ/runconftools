@@ -1,7 +1,10 @@
 # How to create a new generator
 
-Creating a configuration is almost the same as creating a generator for that configuration. 
-Once the generator is created the configuration is created by scripts. 
+A generator takes the local base repository and it changes the OKS database to obtain the desired configuration. 
+The scripts in this package will then commit the changes and create the configuration on the remote operation repository. 
+
+The generators are called automatically from the scripts of this package to create the corresponding configurations. 
+So, creating a configuration is equivalent to write the corresponding generator. 
 
 ## Generator structure
 Generators are stored in the base repo, as they are specific for the base that they have to work upon in order to create the necessary configuration. 
@@ -19,14 +22,17 @@ This will be handled by the configuration management scripts.
 The generate function must return `True` once the generation is successfully completed. 
 Otherwise, it should return `False` or raise an exception. 
 
-A generator should assume that the environmental variables necessary to operate on the OKS files in the base are correctly setup and should not try to set them. 
+In order to use the configutions in the base repository, some environmental variables need to be set. 
+This is usually done with the script `setup_db_path.sh` contained in the base. 
+While writing a generator, one should assume that those environmental variables are correctly setup and should not try to set them from the scripts. 
 
 ### Good practices
 
 As the generator is a python script, one could do everything. 
-Yet it is recommended that the configuration files are managed through the OKS, conffwk or daqconf python interfaces/scripts. 
+Yet it is recommended that the OKS database are managed through the OKS, conffwk or daqconf python interfaces/scripts which guarantess type safety. 
+One should not change the files using python `open` or other low level file editing tools. 
 
-It also recommended that we limit the change of the objects to just changing the references rather than the attributes of the objects. 
+It is also recommended that we limit the changes to the objects to just changing the references rather than the attributes of the objects. 
 Although in some cases that might be unavoidable. 
 
 ## generator testing
@@ -44,7 +50,7 @@ python my_generator.py /path/to/base
 ```
 Or something very similar in spirit. 
 
-While developing, personal experience suggested that is quite useful to develop the generator initially saving the file outside the local base git repository. 
+While developing, personal experience suggested that is quite useful to develop the generator by initially saving the file outside the local base git repository. 
 In this way the chages made to the base by executing the generator can simply be reverted with a 
 ```bash
 (cd /path/to/base; git restore)
@@ -58,8 +64,8 @@ Similarly to the generate function, the same file can contain - but it's not man
 def validate( path:str ) -> bool :
 ```
 function. 
-This is used to perform specific operations that validate the validity of that configuration. 
-As the `generate` function, this is called by the configuration management scripts. 
+This is used to perform specific operations that validate the configuration. 
+As with the `generate` function, this is called by the configuration management scripts. 
 
 The function must return `True` in case the configuration is found to be correct by the function, or `False` otherwise. 
 
