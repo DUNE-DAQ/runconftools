@@ -4,6 +4,8 @@ This is an example on how changes in the base repository can happen.
 
 ### Area setup
 ```bash
+source /cvmfs/dunedaq.opensciencegrid.org/setup_dunedaq.sh
+setup_dbt latest_v5
 dbt-create fddaq-v5.2.2-a9 MyArea
 cd MyArea/
 source env.sh 
