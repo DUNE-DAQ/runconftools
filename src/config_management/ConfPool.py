@@ -210,7 +210,6 @@ class ConfPool:
             # whipe out the branch
             files = self.repo.index.remove(["."], r=True, working_tree=True)
             logging.debug("Removing " + ", ".join(files))
-            self.repo.git.commit("-m", "Clean branch")
             self.repo.git.checkout(f"base/{base}", ".")
             logging.info(f"Restore from base {base}")
             message = ""
