@@ -42,7 +42,7 @@ Generators should be tested before committing and before starting updating the o
 In order to test the generator, it is recommended that that the generator contains the block
 ```python
 if __name__ == '__main__':
-    globals()["generate"](sys.argv[1])
+    generate(sys.argv[1])
 ```
 
 So that the generator can be tested by simply executing
@@ -88,8 +88,8 @@ The structure of the process name validator block to be used when calling other 
 if __name__ == '__main__':
     import sys
     sys.path.append(sys.argv[1] + "/functions")
-    globals()["generate"](sys.argv[1])
-    globals()["validate"](sys.argv[1])
+    generate(sys.argv[1])
+    validate(sys.argv[1])
 ```
 
 ## Example
