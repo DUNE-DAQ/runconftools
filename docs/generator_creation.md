@@ -83,7 +83,7 @@ Same for other generators, that can be imported using
 import generators.np02.monitoring_no_tpg
 ```
 The import of other generators or commong functions has to be done from withing the module functions or the import will fail when calling the generator in a testing phase. 
-The structure of the block that allows to call the generator from outside the script provided by this package will look like 
+The structure of the process name validator block to be used when calling other generator or common function will look like 
 ```python
 if __name__ == '__main__':
     import sys
