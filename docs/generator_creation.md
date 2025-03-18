@@ -94,7 +94,6 @@ if __name__ == '__main__':
 ## Example
 
 ```python
-#!/usr/bin/env python3
 import sys
 
 import conffwk
@@ -103,13 +102,16 @@ import confmodel
 import daqconf.enable as enable
 
 def generate( path:str ) -> bool :
-    entry = path+'/sessions/np02-session.data.xml'
-    session="np02-session"
+
+    import common.np02.config_base as base
+    entry = base.get_entry_file(path)
+
+    session=base.get_session_name()
 
     # enable all the det streams for the daphne
     enable.enable(entry, False, ["np02-pds107-s00-sid50"], session)
 
-    db = conffwk.Configuration("oksconflibs:"+entry)
+    db = base.get_database(path)
 
     # change the daphne configuration
     daphne_app = db.get_dal("DaphneApplication", "daphne-app")
@@ -144,12 +146,12 @@ def generate( path:str ) -> bool :
         db.update_dal(s)
     
     db.commit()
-    
     return True
 
-if __name__ == '__main__':
-    globals()["generate"](sys.argv[1])
 
+if __name__ == '__main__':
+    sys.path.append(sys.argv[1] + "/functions")
+    generate(sys.argv[1])
 ```
 
 This is an example of a generator that uses both `daqconf` and `conffwk` scripts. 
