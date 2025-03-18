@@ -86,7 +86,6 @@ The import of other generators or commong functions has to be done from withing 
 The structure of the process name validator block to be used when calling other generator or common function will look like 
 ```python
 if __name__ == '__main__':
-    import sys
     sys.path.append(sys.argv[1] + "/functions")
     generate(sys.argv[1])
     validate(sys.argv[1])
