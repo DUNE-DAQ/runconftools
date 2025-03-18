@@ -212,12 +212,6 @@ class ConfPool:
             logging.debug("Removing " + ", ".join(files))
             self.repo.git.checkout(f"base/{base}", ".")
             logging.info(f"Restore from base {base}")
-            message = ""
-            if log_message:
-                message = f"Restore from base {base}: {log_message}"
-            else:
-                message = f"Restore from base {base}"
-            self.repo.git.commit("-m", message)
 
         # run the generator
         ## link the module
@@ -232,12 +226,18 @@ class ConfPool:
 
         ## we commmit even if the result is false because having the local result
         ## might be useful for debugging
-        self.commit(f"Execute {generator}")
+        message = ""
+        if log_message:
+            message = f"Execute {generator} on {base}: {log_message}"
+        else:
+            message = f"Execute {generator} on {base}"
+        self.commit(message)
 
         if not res:
             return res
 
         ## verfication
+        logging.info("\n Verification")
         very = self.verify()
         if not very :
             logging.error(f"Verfication failed for {generator}")
