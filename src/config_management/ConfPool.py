@@ -327,7 +327,8 @@ class ConfPool:
             if not res :
                 logging.error(f"{v} failed")
                 return False
-            
+
+        logging.info("Verification successful!")
         return True
             
         
