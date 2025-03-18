@@ -11,6 +11,7 @@ Generators are stored in the base repo, as they are specific for the base that t
 Specifically, they are stored in the folder `functions/generators` directory in the subdirectory specific for the apparatus relevant for the generator. 
 
 Generators are python modules and are expected to be named with with `<configuration_name>.py`. 
+As the generators might be imported by other generators, their names cannot contain `-`. 
 
 Generators will have to contains a generate function with signature
 ```python
@@ -35,7 +36,7 @@ One should not change the files using python `open` or other low level file edit
 It is also recommended that we limit the changes to the objects to just changing the references rather than the attributes of the objects. 
 Although in some cases that might be unavoidable. 
 
-## generator testing
+## Generator testing
 
 Generators should be tested before committing and before starting updating the operation repository. 
 In order to test the generator, it is recommended that that the generator contains the block
@@ -68,6 +69,28 @@ This is used to perform specific operations that validate the configuration.
 As with the `generate` function, this is called by the configuration management scripts. 
 
 The function must return `True` in case the configuration is found to be correct by the function, or `False` otherwise. 
+
+## Common operations
+It is possible to call other generators or common functions. 
+Common functions should be store in the base repository, in the directory `functions/common`. 
+As the function directory is added to the `PYTHONPATH`, one can invoke those functions just by importing. 
+For example:
+```python
+import common.trigger
+```
+Same for other generators, that can be imported using
+```python
+import generators.np02.monitoring_no_tpg
+```
+The import of other generators or commong functions has to be done from withing the module functions or the import will fail when calling the generator in a testing phase. 
+The structure of the block that allows to call the generator from outside the script provided by this package will look like 
+```python
+if __name__ == '__main__':
+    import sys
+    sys.path.append(sys.argv[1] + "/functions")
+    globals()["generate"](sys.argv[1])
+    globals()["validate"](sys.argv[1])
+```
 
 ## Example
 
