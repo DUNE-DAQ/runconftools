@@ -18,7 +18,7 @@ cd ..
 ```
 
 At this point, you have a working environment with the tools necessary to propagate the changes to the operation repo once we are happy with the result. 
-The next step is to have a local configuration area to modify. 
+The next step is to have a local base configuration area to modify. 
 The following starts from the configuration for the DAQ version `fddaq-v5.2.2-a9-1`. 
 ```bash
 git clone ssh://git@gitlab.cern.ch:7999/dune-daq/online/ehn1-daqconfigs.git EHN1-configs 
