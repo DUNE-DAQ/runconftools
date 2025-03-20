@@ -40,8 +40,8 @@ from config_management.ConfPool import ConfPool
 def main(path, apparatus, base_url, operation_url, release, base, conf, debug):
 
     """
-    Set up a local repo and prints some informations. 
-    If the conf option is specified, the relevant configuration from operation is checked out for inspection. 
+    Set up a local repo and prints some information. 
+    If the conf option is specified, the chosen configuration from operation is checked out for inspection. 
     """
 
     logging.basicConfig( format="%(asctime)s %(levelname)-8s %(message)s",

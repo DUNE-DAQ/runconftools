@@ -6,12 +6,13 @@ import click
 import logging
 import os
 import re
+from pathlib import Path
 
 from config_management.ConfPool import ConfPool
 
 
 @click.command(context_settings={'show_default': True}) 
-@click.argument("path", type=click.Path(exists=True, file_okay=False, writable=True))
+@click.argument("path", type=click.Path(exists=False, file_okay=False, readable=True, writable=True))
 @click.option("-a", "--apparatus",
               type=click.Choice(['np02', 'np04'], case_sensitive=True),
               default="np02", help="Selection of the apparatus")
@@ -19,13 +20,13 @@ from config_management.ConfPool import ConfPool
     "--base_url",
     type=click.STRING,
     default="ssh://git@gitlab.cern.ch:7999/dune-daq/online/ehn1-daqconfigs.git",
-    help="Git location of the remote base repo"
+    help="URLof the remote base repo"
 )
 @click.option(
     "--operation_url",
     type=click.STRING,
     default=None,
-    help="Git location of the remote operation repo. If None, the repo is set according to the apparatus"
+    help="URL of the remote operation repo. If None, the repo is set according to the apparatus"
 )
 @click.option("-b", "--base", type=click.STRING, default = ConfPool.get_release(),
               help="Base branch to be used as a starting point")
@@ -48,7 +49,7 @@ from config_management.ConfPool import ConfPool
 def main(path, apparatus, base_url, operation_url, base, release, conf, push_only, push, debug):
 
     """
-    This script takes the a base branch and propagates the changes to the operation repo, creating the necessary configurations.
+    This script takes the base branch and propagates the changes to the operation repo, creating the necessary configurations.
     As a default, the branches are not pushed, use -p  or --push-only to perform the push
     """
 
@@ -63,6 +64,8 @@ def main(path, apparatus, base_url, operation_url, base, release, conf, push_onl
             case "np02" : operation_url = "ssh://git@gitlab.cern.ch:7999/dune-daq/online/np02-configs-operation.git"
             case "np04" : operation_url = "ssh://git@gitlab.cern.ch:7999/dune-daq/online/np04-configs-operations.git"
 
+    Path(path).mkdir(parents=True, exist_ok=True)
+    
     pool = ConfPool(path, operation_url=operation_url, base_url=base_url)
 
     all_ok = True

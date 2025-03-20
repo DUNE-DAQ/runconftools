@@ -365,8 +365,11 @@ class ConfPool:
         ret = []
         for c in confs :
             branch = f"{release}/{c}"
-            self.operation.push(f":{branch}")
-            ret.append(branch)
+            try :
+                self.operation.push(f":{branch}")
+                ret.append(branch)
+            except:
+                logging.warning(f"Failed to remove {branch}")
 
         return ret
 

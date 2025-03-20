@@ -17,13 +17,13 @@ from config_management.ConfPool import ConfPool
     "--base_url",
     type=click.STRING,
     default="ssh://git@gitlab.cern.ch:7999/dune-daq/online/ehn1-daqconfigs.git",
-    help="Git location of the remote base repo"
+    help="URL of the remote base repo"
 )
 @click.option(
     "--operation_url",
     type=click.STRING,
     default=None,
-    help="Git location of the remote operation repo. If None, the repo is set according to the apparatus"
+    help="URL of the remote operation repo. If None, the repo is set according to the apparatus"
 )
 @click.option("-r", "--release", type=click.STRING, default =None,
               help="Operation branch prefix for the branches to be deleted")
@@ -40,7 +40,7 @@ from config_management.ConfPool import ConfPool
 def main(path, apparatus, base_url, operation_url, release, conf, debug):
 
     """
-    This script removes from the operation repo the selected configurations for a given release 
+    Removes from the operation repo the selected configurations for a given release 
     """
 
     logging.basicConfig(
