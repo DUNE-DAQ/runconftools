@@ -27,7 +27,7 @@ from config_management.ConfPool import ConfPool
 )
 @click.option("-r", "--release", type=click.STRING, default = ConfPool.get_release())
 @click.option("-b", "--base", type=click.STRING, default = None, help="If None, it's set equal to the release")
-@click.option("-c", "--conf", type=click.STRING, default=None)
+@click.option("-c", "--conf", type=click.STRING, default=None, help="Configuration key to be checked out. If None, the base is checked out instead")
 @click.option(
     "--debug",
     type=click.BOOL,
