@@ -1,7 +1,7 @@
 # config-management
 
 This python repository interfaces with the operation repositories that store the configurations used at EHN1. 
-The configurations are generated from the base `ehn1-configs`.
+The configurations are generated from the base `ehn1-daqconfigs`, https://gitlab.cern.ch/dune-daq/online/ehn1-daqconfigs.
 The scripts start from the base to construct the necessary operation branches, which are ultimately the configurations. 
 
 This repository is intended for direct use by experts only. 
@@ -17,13 +17,13 @@ The base repository contains both OKS objects and generators used to create oper
 
 ## Configuration branches
 The branches on the operation repositories are named as `<version>/<configuration_key>`. 
-For stable configurations, `<version>` is in the form of `fddaq-v5.2.2`, but in general it can be any string specified at the time that the generators are executed. 
+For stable configurations, `<version>` is in the form of `fddaq-v5.x.y` (e.g. `fdddaq-v5.2.2`), but in general it can be any string specified at the time that the generators are executed. 
 The `<configuration_key>` is the name of the generator used to create the configuration. 
 
 Here are some examples:
- - `develop/monitoring-with-tpg` is the configuration called `monitoring-with-tpg` compatible with the OKS schema published with the nightly build and it should work with the develop branches of the DAQ at that time.
- - `fddaq-v5.2.2/daphne-fullstream` is the configuration called `daphne-fullstream` to be used with the tagged DAQ version v5.2.2. Note that this is used also for prep-relase branches and release candidate of the DAQ for v5.2.2. 
- - `mroda-test/monitoring-no-tpg` is a temporary configuration that might eventually replace the current `monitoring-no-tpg` pending some testing. These temporary branches should be created if a particular configuration must be tested from the shifter.
+ - `develop/monitoring-with-tpg` is the configuration called `monitoring-with-tpg` compatible with the OKS schema published with the nightly build including the develop branches used at the time of generation.
+ - `fddaq-v5.2.2/daphne-fullstream` is the configuration called `daphne-fullstream` to be used with DAQ version v5.2.2. Note that this is used also for prep-relase branches and release candidate of the DAQ for v5.2.2. 
+ - `mroda-test/monitoring-no-tpg` is a temporary configuration that might eventually replace the current `monitoring-no-tpg` pending testing. These temporary branches should be created if a particular configuration must be tested from the shifter.
    This is necessary as the shifter interface only sees whatever is stored in the operation repo. 
 
 
@@ -31,17 +31,17 @@ Here are some examples:
 This is a python package, so just checkout the repo and call
 ```bash
 cd config-management
-pip install [-e] .
+pip install .
 ```
 Please remember that this requires the proxy from EHN1 machines. 
 
 ## Scripts 
-Experts interacting with the operation repository have just a few scripts that they can use. 
-All the script names start with `cpm-` that stands for Configuration Pool Management.
+This repository provides the following scripts.
+All script names start with `cpm-`, which stands for Configuration Pool Management.
 
 
 ### cpm-setup 
-This is mostly a diagnostic script designed to setup a local area linked to both base and operation repostiories and to print some information about the configurations.
+This is a diagnostic script designed to setup a local area linked to both base and operation repostiories and to print some information about the configurations.
 
 ```bash
 Usage: cpm-setup [OPTIONS] PATH
@@ -62,10 +62,10 @@ Options:
   --help                       Show this message and exit.
 ```
 
-The `PATH` has to be an existing location and has to be either empty or a valid `ehn1-configs` repository. 
-Be aware that if the directory contains a local repository some local changes might be lost, so please push all the changes that are important before calling `cpm-setup` on a non-empty directory.
+The `PATH` must be an existing location and has to be either empty or a valid `ehn1-daqconfigs` repository. 
+If the directory contains a local repository, local changes may be lost so please push all changes that are important before calling `cpm-setup` on a non-empty directory.
 
-The script simply sets up a git repository and prints some information about the release. 
+This script sets up a git repository and prints some information about the release. 
 
 The information printed is:
  - The list of available branches in the base, without any filtering;
@@ -107,30 +107,32 @@ Options:
 ```
 
 As for the setup, `PATH` has to be an existing location and has to be either empty or a valid `ehn1-configs` repository. 
-Be aware that if the directory contains repositories some local changes might be lost. 
-For the update, it is recommended that a new directory is created for the operation. 
+As previously, ensure local changes are pushed before using an existing path with this script.
+It is recommended that a new directory is created for the operation. 
 It can be deleted once the propagation is complete. 
 
 The script starts by checking out the required base. 
 Then, for every generator in the base, it creates the branches using the `release` option as `version` to be used in the branch name. 
-It is possible to select the generators to be executed using a regex, with the option `conf`. 
+The generators to be executed are selected using a regex with the option `conf`. 
 For example
 ```bash
-cpm-update -r mroda --conf "^monitoring-*$" Test
+cpm-update -r mroda --conf "^monitoring-.*$" Test
 ```
 will create branches called `mroda/monitoring-<something>` and will ignore all the other generators.
 
-When generators are executed, all the verifiers are exectued as well and, if present, the validator associated to the generator is also executed. 
-If any of the verifiers or validators fails, the branch is still created and committed, but they are not pushed to the operation, even if requested. 
-This will allow local persistency to investigate the isuse. 
+When generators are executed, so are the configuration verifiers, 
+If present, the configuraiton validator associated to the generator is also executed. 
+If any verifiers or validators fail, the branch is still created and committed, but they are not pushed to the operation, even if requested. 
+This will allow local persistency to investigate the issue. 
 
-As a default, the script does not push, it has to be asked specifically with the `-p` option. 
-After a local geneation, `cpm-update` can be followed by another call with the `--push-only` that simply pushes the local branches corresponding to the existing generators. 
+By default, the script does not push.
+This is done explicitly with the `-p` option.
+After a local geneation, `cpm-update` can be followed up with another call with the `--push-only` which pushes the local branches corresponding to the existing generators. 
 
 
 ### cpm-purge
-Sometimes temporary branches have to be pushed on operation as they need to be tested through the shifter interface.
-Once the test is done, it's useful to have a way to clear these branches. 
+Sometimes temporary branches must be pushed to operation repositories as they need to be tested through the shifter interface.
+Once the test is done the branches should be removed with `cpm-purge`.
 This is done with `cpm-purge`
 ```bash
 Usage: cpm-purge [OPTIONS] PATH
@@ -154,5 +156,5 @@ Options:
   --help                       Show this message and exit.
 ```
 
-This simply removes the branches with for a specified release.
-As for the update script, it's possible to select the configuration keys using a regex with the option `--conf`. 
+This removes the branches with for a specified release.
+As for the update script, the configuration keys can be selected using a regex with the option `--conf`. 
