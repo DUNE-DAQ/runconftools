@@ -1,16 +1,19 @@
 # config-management
 
-This python repository has the goal of interfacing with the operation repositories used to store the configurations used for runnning at EHN1. 
-As the configurations are generated from `ehn1-configs`, also known as the base repository, the scripts start from the base to construct the necessary operation branches, which are ultimately the configurations. 
+This python repository interfaces with the operation repositories that store the configurations used at EHN1. 
+The configurations are generated from the base `ehn1-configs`.
+The scripts start from the base to construct the necessary operation branches, which are ultimately the configurations. 
 
-The functionality provided by this repository is meant for experts only.
+This repository is intended for direct use by experts only. 
 Shifters will use these interfaces indirectly via the shifter interface. 
 
 ## High level view
-According to this model, the different configurations to be used for running are stored in different branches of "operation" repositories. 
-There will be one operation repository for each apparatus: `np02`, `np04`, and maybe separate operation repositories for coldboxes too. 
-These branches are all derived using configuration generation functions, or simply generators, starting from a "base" repository. 
-The base repository contains both OKS obejcts and generators. 
+According to our configuration model, the different configurations to be used for operations are stored in different branches of operation repositories. 
+There is one operation repository for each apparatus: `np02`, `np04`. To be decided if coldboxes will have their own separate repositories. 
+The current repositores are https://gitlab.cern.ch/dune-daq/online/np02-configs-operation and https://gitlab.cern.ch/dune-daq/online/np04-configs-operations but NO ONE should interface directly with those repositories. 
+Changes should only be performed using the interfaces of this package. 
+The branches in the operation repoitories are derived using configuration generation functions (known as generators), starting from a base repository. 
+The base repository contains both OKS objects and generators used to create operation configurations. 
 
 ## Configuration branches
 The branches on the operation repositories are named as `<version>/<configuration_key>`. 
