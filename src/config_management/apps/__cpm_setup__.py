@@ -19,11 +19,13 @@ from config_management.ConfPool import ConfPool
     "--base_url",
     type=click.STRING,
     default="https://gitlab.cern.ch/dune-daq/online/ehn1-daqconfigs.git",
+    help="URL of the base repository"
 )
 @click.option(
     "--operation_url",
     type=click.STRING,
     default=None,
+    help="URL of the operation repository. If None, it's picked based on the apparatus"
 )
 @click.option("-r", "--release", type=click.STRING, default = ConfPool.get_release())
 @click.option("-b", "--base", type=click.STRING, default = None, help="If None, it's set equal to the release")
