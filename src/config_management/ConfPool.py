@@ -224,21 +224,26 @@ class ConfPool:
         ## execute the function
         res = genctor(self.repo.working_dir)
 
-        ## we commmit even if the result is false because having the local result
-        ## might be useful for debugging
+        ## prepare the message for commit
         message = ""
         if log_message:
             message = f"Execute {generator} on {base}: {log_message}"
         else:
             message = f"Execute {generator} on {base}"
-        self.commit(message)
-
+        
+        ## we commmit even if the result is false because having the local result
+        ## might be useful for debugging
         if not res:
+            self.commit(message)
             return res
 
-        ## verfication
+        ## verfication which might produce files 
         logging.info("\n Verification")
         very = self.verify()
+
+        self.commit(message)
+
+        ## stop the process if veryfication failed
         if not very :
             logging.error(f"Verfication failed for {generator}")
             return 
