@@ -238,7 +238,7 @@ class ConfPool:
             return res
 
         ## verfication which might produce files 
-        logging.info("\n Verification")
+        logging.info("---- Verification ----")
         very = self.verify()
 
         self.commit(message)
@@ -347,6 +347,13 @@ class ConfPool:
         logging.debug("Files that changed: " + ", ".join(file_list))
         for f in file_list:
             self.repo.git.add(f)
+            
+        ## add possible additional file in case they are useful for backup
+        files = self.repo.untracked_files
+        for f in files :
+            logging.info(f"Adding new file: {f}")
+            self.repo.git.add(f)
+
         # commit
         self.repo.git.commit("-m", message)
 
