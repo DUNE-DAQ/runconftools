@@ -194,6 +194,7 @@ class ConfPool:
         except :
             ## the configuraiton has no base, so it's not safe to delete anything
             return []
+        
         safe_file = None
         function_name = "get_entry_file"
         if hasattr(base_module, function_name):
@@ -201,7 +202,7 @@ class ConfPool:
             safe_file_name=functor(self.repo.working_dir)
             safe_file=Path(safe_file_name).name
         else:
-            ## again to dangerous to remove things
+            ## again, too dangerous to remove things
             return []
 
         logging.debug(f"file to be saved: {safe_file}")
@@ -212,10 +213,9 @@ class ConfPool:
                 to_be_removed.append(str(f.relative_to(self.repo.working_dir)))
 
         logging.debug("Removing " + ", ".join(to_be_removed))
-
         files = self.repo.index.remove(to_be_removed, r=True, working_tree=True)
-        
         logging.debug("Removed " + ", ".join(files))
+        
         return files
         
 
