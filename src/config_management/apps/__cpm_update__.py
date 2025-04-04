@@ -62,7 +62,7 @@ def main(path, apparatus, base_url, operation_url, base, release, conf, push_onl
     if not operation_url :
         match apparatus :
             case "np02" : operation_url = "ssh://git@gitlab.cern.ch:7999/dune-daq/online/np02-configs-operation.git"
-            case "np04" : operation_url = "ssh://git@gitlab.cern.ch:7999/dune-daq/online/np04-configs-operations.git"
+            case "np04" : operation_url = "ssh://git@gitlab.cern.ch:7999/dune-daq/online/np04-configs-operation.git"
 
     Path(path).mkdir(parents=True, exist_ok=True)
     

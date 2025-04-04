@@ -52,9 +52,9 @@ def main(path, apparatus, base_url, operation_url, release, base, conf, debug):
     if not operation_url :
         match apparatus :
             case "np02" : operation_url = "https://gitlab.cern.ch/dune-daq/online/np02-configs-operation.git"
-            case "np04" : operation_url = "https://gitlab.cern.ch/dune-daq/online/np04-configs-operations.git"
+            case "np04" : operation_url = "https://gitlab.cern.ch/dune-daq/online/np04-configs-operation.git"
         
-    pool = ConfPool(path, operation_url=operation_url, base_url=base_url)
+    pool = ConfPool(path, operation_url=operation_url, base_url=base_url, apparatus=apparatus)
 
     bases = pool.get_base_branches()
     logging.info("Available bases: {}".format(", ".join(bases)))
