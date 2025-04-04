@@ -4,6 +4,7 @@ import os
 import re
 import sys
 import importlib
+from pathlib import Path
 
 
 class ConfPool:
@@ -181,6 +182,41 @@ class ConfPool:
         self.setup_conf_path()
         return head
 
+
+    def remove_unused_sessions(self) -> list[str] :
+        directory = Path(self.repo.working_dir+"/sessions")
+        
+        # file to be saved
+        base_module_name = "common."+self.apparatus + ".config_base"
+        base_module = None
+        try :
+            base_module = importlib.import_module(base_module_name)
+        except :
+            ## the configuraiton has no base, so it's not safe to delete anything
+            return []
+        safe_file = None
+        function_name = "get_entry_file"
+        if hasattr(base_module, function_name):
+            functor=getattr(base_module, function_name)
+            safe_file=functor(self.repo.working_dir)
+        else:
+            ## again to dangerous to remove things
+            return []
+
+        logging.debug(f"file to be saved: {safe_file}")
+        to_be_removed = []
+        for f in directory.rglob("*.data.xml") :
+            if f.name != safe_file :
+                to_be_removed.append(f.name)
+
+        logging.debug("Removing " + ", ".join(to_be_removed))
+
+        #files = self.repo.index.remove(to_be_removed, r=True, working_tree=True)
+        
+
+        
+
+    
     def generate_conf(
             self, base: str, generator: str,
             release_tag: str = None, log_message: str = None, no_push:bool = False
@@ -213,6 +249,9 @@ class ConfPool:
             self.repo.git.checkout(f"base/{base}", ".")
             logging.info(f"Restore from base {base}")
 
+
+        self.remove_unused_sessions()
+        
         # run the generator
         ## link the module
         module_name = "generators."+self.apparatus + "." + generator
