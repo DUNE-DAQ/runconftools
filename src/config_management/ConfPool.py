@@ -198,7 +198,8 @@ class ConfPool:
         function_name = "get_entry_file"
         if hasattr(base_module, function_name):
             functor=getattr(base_module, function_name)
-            safe_file=functor(self.repo.working_dir)
+            safe_file_name=functor(self.repo.working_dir)
+            safe_file=Path(safe_file_name).name
         else:
             ## again to dangerous to remove things
             return []
@@ -206,14 +207,16 @@ class ConfPool:
         logging.debug(f"file to be saved: {safe_file}")
         to_be_removed = []
         for f in directory.rglob("*.data.xml") :
+            logging.debug(f.name)
             if f.name != safe_file :
-                to_be_removed.append(f.name)
+                to_be_removed.append(str(f.relative_to(self.repo.working_dir)))
 
         logging.debug("Removing " + ", ".join(to_be_removed))
 
-        #files = self.repo.index.remove(to_be_removed, r=True, working_tree=True)
+        files = self.repo.index.remove(to_be_removed, r=True, working_tree=True)
         
-
+        logging.debug("Removed " + ", ".join(files))
+        return files
         
 
     
