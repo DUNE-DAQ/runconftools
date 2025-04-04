@@ -253,8 +253,6 @@ class ConfPool:
             logging.info(f"Restore from base {base}")
 
 
-        self.remove_unused_sessions()
-        
         # run the generator
         ## link the module
         module_name = "generators."+self.apparatus + "." + generator
@@ -272,7 +270,10 @@ class ConfPool:
             message = f"Execute {generator} on {base}: {log_message}"
         else:
             message = f"Execute {generator} on {base}"
-        
+
+
+        self.remove_unused_sessions()
+
         ## we commmit even if the result is false because having the local result
         ## might be useful for debugging
         if not res:
