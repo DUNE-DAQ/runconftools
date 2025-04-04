@@ -253,8 +253,6 @@ class ConfPool:
             logging.info(f"Restore from base {base}")
 
 
-        self.remove_unused_sessions()
-        
         # run the generator
         ## link the module
         module_name = "generators."+self.apparatus + "." + generator
@@ -281,6 +279,8 @@ class ConfPool:
             self.commit(message)
             return res
 
+        self.remove_unused_sessions()
+        
         ## verfication which might produce files 
         logging.info("---- Verification ----")
         very = self.verify()
