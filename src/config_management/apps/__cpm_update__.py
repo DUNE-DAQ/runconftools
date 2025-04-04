@@ -66,7 +66,7 @@ def main(path, apparatus, base_url, operation_url, base, release, conf, push_onl
 
     Path(path).mkdir(parents=True, exist_ok=True)
     
-    pool = ConfPool(path, operation_url=operation_url, base_url=base_url)
+    pool = ConfPool(path, operation_url=operation_url, base_url=base_url, apparatus=apparatus)
 
     all_ok = True
     if not push_only :
