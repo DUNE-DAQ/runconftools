@@ -8,7 +8,7 @@ import os
 import re
 from pathlib import Path
 
-from config_management.ConfPool import ConfPool
+from runconftools.ConfPool import ConfPool
 
 
 @click.command(context_settings={'show_default': True}) 

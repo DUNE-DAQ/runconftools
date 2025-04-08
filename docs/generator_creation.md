@@ -18,7 +18,7 @@ Generators will have to contains a generate function with signature
 def generate( path:str ) -> bool :
 ```
 Where the incoming path is mandatory and is expected to point to the location of the base repository on which the generator will act.
-This will be handled by the configuration management scripts. 
+This will be handled by the runconftools scripts. 
 
 The generate function must return `True` once the generation is successfully completed. 
 Otherwise, it should return `False` or raise an exception. 
@@ -66,7 +66,7 @@ def validate( path:str ) -> bool :
 ```
 function. 
 This is used to perform specific operations that validate the configuration. 
-As with the `generate` function, this is called by the configuration management scripts. 
+As with the `generate` function, this is called by the runconftools scripts. 
 
 The function must return `True` in case the configuration is found to be correct by the function, or `False` otherwise. 
 

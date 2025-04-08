@@ -1,4 +1,4 @@
-# config-management
+# runconftools
 
 This python repository interfaces with the operation repositories that store the configurations used at EHN1. 
 The configurations are generated from the base `ehn1-daqconfigs`, https://gitlab.cern.ch/dune-daq/online/ehn1-daqconfigs.
@@ -30,7 +30,7 @@ Here are some examples:
 ## Installation
 This is a python package, so just checkout the repo and call
 ```bash
-cd config-management
+cd runconftools
 pip install .
 ```
 Please remember that this requires the proxy from EHN1 machines. 

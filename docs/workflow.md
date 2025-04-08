@@ -11,8 +11,8 @@ cd MyArea/
 source env.sh 
 dbt-workarea-env 
 dbt-build
-git clone ssh://git@gitlab.cern.ch:7999/dune-daq/online/config-management.git 
-cd config-management
+git clone ssh://git@gitlab.cern.ch:7999/dune-daq/online/runconftools.git 
+cd runconftools
 pip install .
 cd ..
 ```
