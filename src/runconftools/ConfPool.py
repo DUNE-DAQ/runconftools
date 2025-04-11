@@ -224,8 +224,10 @@ class ConfPool:
         if not release_tag:
             release_tag = base
 
-        confs = self.get_confs(release=re.compile(release_tag))
+        confs = self.get_confs(release=re.compile(f"^{release_tag}$"))
 
+        logging.debug("Available confs: " + ", ".join(confs))
+        
         ref_name = release_tag + "/" + generator
 
         # prepare the branch
