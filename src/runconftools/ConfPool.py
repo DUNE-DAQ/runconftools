@@ -205,8 +205,13 @@ class ConfPool:
             return []
 
         logging.debug("Removing " + ", ".join(to_be_removed))
-        files = self.repo.index.remove(to_be_removed, r=True, working_tree=True)
-        logging.debug("Removed " + ", ".join(files))
+        try :
+            files = self.repo.index.remove(to_be_removed, working_tree=True)
+            logging.debug("Removed " + ", ".join(files))
+        except :
+            logging.warning("forcefully removing " + ", ".join(to_be_removed))
+            self.repo.git.rm("-f", " ".join(to_be_removed))
+            files = to_be_removed
         
         return files
         
@@ -219,8 +224,10 @@ class ConfPool:
         if not release_tag:
             release_tag = base
 
-        confs = self.get_confs(release=re.compile(release_tag))
+        confs = self.get_confs(release=re.compile(f"^{release_tag}$"))
 
+        logging.debug("Available confs: " + ", ".join(confs))
+        
         ref_name = release_tag + "/" + generator
 
         # prepare the branch
