@@ -210,7 +210,8 @@ class ConfPool:
             logging.debug("Removed " + ", ".join(files))
         except :
             logging.warning("forcefully removing " + ", ".join(to_be_removed))
-            self.repo.git.rm("-f", " ".join(to_be_removed))
+            for f in to_be_removed :
+                self.repo.git.rm("-f", f)
             files = to_be_removed
         
         return files
