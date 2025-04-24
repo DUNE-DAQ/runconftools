@@ -72,6 +72,25 @@ class ConfPool:
             f"{self.repo.working_dir}:{os.environ.get('DUNEDAQ_DB_PATH', '')}"
         )
 
+
+    def __checkout(self, local_name:str, ref_name:str, remote) -> git.refs.head.Head:
+        local_branches = [b.name for b in self.repo.branches]
+        head = None
+        if local_name not in local_branches :
+            head = (
+                self.repo.create_head(local_name, remote.refs[ref_name])
+                .set_tracking_branch(remote.refs[ref_name])
+                .checkout()
+            )
+        else :
+            self.repo.git.checkout(local_name)
+            head = self.repo.active_branch
+
+        remote.pull(f"{ref_name}:{local_name}")
+        self.setup_conf_path()
+        return head
+            
+
     def checkout_base(self, base: str) -> git.refs.head.Head:
         bases = self.get_base_branches()
         if base not in bases:
@@ -82,14 +101,7 @@ class ConfPool:
         ## base. This is the way we are going to store the base
         ref_name = base
         local_name = ref_name + "/____BASE____"
-        head = (
-            self.repo.create_head(local_name, self.base.refs[ref_name])
-            .set_tracking_branch(self.base.refs[ref_name])
-            .checkout()
-        )
-        self.base.pull(f"{ref_name}:{local_name}")
-        self.setup_conf_path()
-        return head
+        return self.__checkout(local_name, ref_name, self.base)
 
     def get_generators(self, base: str) -> list[str]:
         regex = re.compile("(.*)\.py$")
@@ -173,15 +185,7 @@ class ConfPool:
             return None
 
         ref_name = f"{release}/{conf}"
-        head = (
-            self.repo.create_head(ref_name, self.operation.refs[ref_name])
-            .set_tracking_branch(self.operation.refs[ref_name])
-            .checkout()
-        )
-        self.operation.pull(f"{ref_name}")
-        self.setup_conf_path()
-        return head
-
+        return self.__checkout(ref_name, ref_name, self.operation)
 
     def remove_unused_sessions(self) -> list[str] :
         directory = Path(self.repo.working_dir+"/sessions")
