@@ -4,12 +4,13 @@ import click
 import logging
 import os
 import re
+from pathlib import Path
 
 from runconftools.ConfPool import ConfPool
 
 
 @click.command(context_settings={'show_default': True}) 
-@click.argument("path", type=click.Path(exists=True, file_okay=False, writable=True))
+@click.argument("path", type=click.Path(exists=False, file_okay=False, writable=True))
 @click.option("-a", "--apparatus",
               type=click.Choice(['np02', 'np04'], case_sensitive=True),
               default="np02", help="Selection of the apparatus")
@@ -53,6 +54,8 @@ def main(path, apparatus, base_url, operation_url, release, conf, debug):
         match apparatus :
             case "np02" : operation_url = "ssh://git@gitlab.cern.ch:7999/dune-daq/online/np02-configs-operation.git"
             case "np04" : operation_url = "ssh://git@gitlab.cern.ch:7999/dune-daq/online/np04-configs-operation.git"
+
+    Path(path).mkdir(parents=True, exist_ok=True)
 
     pool = ConfPool(path, operation_url=operation_url, base_url=base_url, apparatus=apparatus)
 
