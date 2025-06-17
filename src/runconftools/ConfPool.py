@@ -104,14 +104,12 @@ class ConfPool:
         return self.__checkout(local_name, ref_name, self.base)
 
     def get_generators(self, base: str) -> list[str]:
-        regex = re.compile("(.*)\.py$")
+        regex = re.compile("^(?!__init__)(.*)\.py$")
         self.checkout_base(base)
         files = []
         path = self.repo.working_dir + "/functions/generators/" + self.apparatus
         if os.path.isdir(path):
             for f in os.listdir(path):
-                if f == "__init__.py":
-                    continue  # Skip __init__.py
                 if os.path.isfile(os.path.join(path, f)):
                     match = regex.match(f)
                     if match:
@@ -119,7 +117,7 @@ class ConfPool:
         return files
 
     def get_verifiers(self, base: str = None) -> list[str]:
-        regex = re.compile("(.*)\.py$")
+        regex = re.compile("^(?!__init__)(.*)\.py$")
         if base :
             self.checkout_base(base)
             ## otherwise just get the verifiers from the current branch
@@ -128,8 +126,6 @@ class ConfPool:
         path = self.repo.working_dir + "/functions/verifiers"
         if os.path.isdir(path):
             for f in os.listdir(path):
-                if f == "__init__.py":
-                    continue  # Skip __init__.py
                 if os.path.isfile(os.path.join(path, f)):
                     match = regex.match(f)
                     if match:
