@@ -110,6 +110,8 @@ class ConfPool:
         path = self.repo.working_dir + "/functions/generators/" + self.apparatus
         if os.path.isdir(path):
             for f in os.listdir(path):
+                if f == "__init__.py":
+                    continue  # Skip __init__.py
                 if os.path.isfile(os.path.join(path, f)):
                     match = regex.match(f)
                     if match:
@@ -126,6 +128,8 @@ class ConfPool:
         path = self.repo.working_dir + "/functions/verifiers"
         if os.path.isdir(path):
             for f in os.listdir(path):
+                if f == "__init__.py":
+                    continue  # Skip __init__.py
                 if os.path.isfile(os.path.join(path, f)):
                     match = regex.match(f)
                     if match:
