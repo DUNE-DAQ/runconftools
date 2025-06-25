@@ -35,6 +35,30 @@ pip install .
 ```
 Please remember that this requires the proxy from EHN1 machines. 
 
+###
+In order to run the scripts you need access to CERN gitlab repositories and you should
+ - setup an ssh key to CERN gitlab, in order to use `cpm-update` and `cpm-purge`
+ - setup a netrc file to allow your git to access the configuration repositores via a token
+
+In the np04 machines, for the user `np04daq` this is already setup.
+
+### netrc configuration
+The gitlab token is contained in the home of `np04daq` in the file `.netrc`. For obvious reason we cannot share it freely. 
+Copy the file in your home directory. 
+Please note that the file has to be visible only from the user, so you need log in as np04 and copy the content, you cannot just copy the file. 
+In your file, change the username to your username. 
+Make sure that your file has the following permissions:
+```bash
+-rw------- 1 np04daq np-comp 74 Mar 14 12:56 .netrc
+```
+
+The next step is to configure git so that it uses the .netrc file. 
+This can be done by adding to your `.gitconfig` file the following block:
+```
+[credential]
+        helper = netrc
+```
+
 ## Scripts 
 This repository provides the following scripts.
 All script names start with `cpm-`, which stands for Configuration Pool Management.
