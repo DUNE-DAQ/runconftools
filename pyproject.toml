@@ -44,7 +44,7 @@ cpm-update = "runconftools.apps.__cpm_update__:main"
 cpm-purge = "runconftools.apps.__cpm_purge__:main"
 
 [tool.pytest.ini_options]
-addopts = "-v --tb=short --cov=integrationtest --cov=src/integrationtest tests/"  # omitted --cov-report=html to avoid suppressing table to stdout
+addopts = "-v --tb=short --cov=runconftools --cov=src/runconftools tests/"  # omitted --cov-report=html to avoid suppressing table to stdout
 
 [tool.coverage.run]
 source = ["runconftools"]
