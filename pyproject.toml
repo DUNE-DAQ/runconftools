@@ -18,6 +18,11 @@ dependencies = [
 	     ]
 
 [project.optional-dependencies]
+dev = [
+    "ruff",
+    "pytest",
+    "pytest-cov",
+]
 develop = [
     "ipdb",
     "ipython",
@@ -37,3 +42,24 @@ where = ["src"]
 cpm-setup = "runconftools.apps.__cpm_setup__:main"
 cpm-update = "runconftools.apps.__cpm_update__:main"
 cpm-purge = "runconftools.apps.__cpm_purge__:main"
+
+[tool.pytest.ini_options]
+addopts = "-v --tb=short --cov=runconftools --cov=src/runconftools tests/"  # omitted --cov-report=html to avoid suppressing table to stdout
+
+[tool.coverage.run]
+source = ["runconftools"]
+omit = ["tests/*", "scripts/*"]
+
+# * See https://docs.astral.sh/ruff/rules/ for details on Ruff's linting options
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "F",    # check for errors using PyFlakes
+    "I",    # best practices for import calls
+    "UP",   # suggestions for code modernization
+    "RUF",  # built-in Ruff warnings
+    "R",    # refactoring suggestions
+]
+ignore = [
+    "E501", # Don't enforce line lengths within a linting context
+]
