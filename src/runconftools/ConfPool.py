@@ -1,10 +1,10 @@
-import git
+import importlib
 import logging
 import os
 import re
 import sys
-import importlib
-from pathlib import Path
+
+import git
 
 
 class ConfPool:
@@ -12,8 +12,8 @@ class ConfPool:
         self,
         path:str,
         apparatus: str = "np02",
-        operation_url: str = None,
-        base_url: str = None,
+        operation_url: str | None = None,
+        base_url: str | None = None,
     ) -> None:
         self.conf_regex = re.compile("^operation/([^/]+)/(.*)$")
         self.base_regex = re.compile("^base/(.*)$")
@@ -52,8 +52,7 @@ class ConfPool:
         match = regex.match(name)
         if match :
             return match.group(1)
-        else :
-            return default
+        return default
                 
     def get_base_branches(self) -> list[str]:
         self.base.fetch()
@@ -116,7 +115,7 @@ class ConfPool:
                         files.append(match.group(1))
         return files
 
-    def get_verifiers(self, base: str = None) -> list[str]:
+    def get_verifiers(self, base: str | None = None) -> list[str]:
         regex = re.compile("^(?!__init__)(.*)\.py$")
         if base :
             self.checkout_base(base)
@@ -147,7 +146,7 @@ class ConfPool:
 
     def get_confs(
         self,
-        release: re.Pattern = None,
+        release: re.Pattern | None = None,
         regex: re.Pattern = re.compile(".*"),
     ) -> list:
 
@@ -173,7 +172,7 @@ class ConfPool:
         return confs
 
     def checkout_conf(
-         self, conf: str, release: str = None,
+         self, conf: str, release: str | None = None,
     ) -> git.refs.head.Head:
 
         if not release :
@@ -188,14 +187,13 @@ class ConfPool:
         return self.__checkout(ref_name, ref_name, self.operation)
 
     def remove_unused_sessions(self) -> list[str] :
-        directory = Path(self.repo.working_dir+"/sessions")
-        
+                
         # file to be saved
         base_module_name = "common."+self.apparatus + ".config_base"
         base_module = None
         try :
             base_module = importlib.import_module(base_module_name)
-        except :
+        except Exception:
             ## the configuraiton has no base, so it's not safe to delete anything
             return []
 
@@ -212,7 +210,7 @@ class ConfPool:
         try :
             files = self.repo.index.remove(to_be_removed, working_tree=True)
             logging.debug("Removed " + ", ".join(files))
-        except :
+        except Exception :
             logging.warning("forcefully removing " + ", ".join(to_be_removed))
             for f in to_be_removed :
                 self.repo.git.rm("-f", f)
@@ -224,7 +222,7 @@ class ConfPool:
     
     def generate_conf(
             self, base: str, generator: str,
-            release_tag: str = None, log_message: str = None, no_push:bool = False
+            release_tag: str | None = None, log_message: str | None = None, no_push:bool = False
     ) -> bool:
         if not release_tag:
             release_tag = base
@@ -236,7 +234,6 @@ class ConfPool:
         ref_name = release_tag + "/" + generator
 
         # prepare the branch
-        head = None
         if generator not in confs:
             logging.info(f"New configuration {generator} created from base {base}")
             self.checkout_base(base)
@@ -244,12 +241,12 @@ class ConfPool:
             logging.debug(",".join(branches))
             if ref_name in branches:
                 self.repo.delete_head(ref_name, force=True)
-            head = self.repo.create_head(ref_name).checkout()
+            self.repo.create_head(ref_name).checkout()
         else:
             logging.warning(
                 f"Configuration {generator} overrides existing operation branch"
             )
-            head = self.checkout_conf(generator, release=release_tag)
+            self.checkout_conf(generator, release=release_tag)
             # whipe out the branch
             files = self.repo.index.remove(["."], r=True, working_tree=True)
             logging.debug("Removing " + ", ".join(files))
@@ -294,7 +291,7 @@ class ConfPool:
         ## stop the process if veryfication failed
         if not very :
             logging.error(f"Verfication failed for {generator}")
-            return 
+            return None 
         
         ## validate
         if hasattr(module, "validate"):
@@ -313,7 +310,7 @@ class ConfPool:
         return res
 
     def propagate_base(
-        self, base: str, release_tag:str=None,
+        self, base: str, release_tag:str|None=None,
             conf_regex: re.Pattern = re.compile(".*"),
             no_push:bool = False
     ) -> bool :    ## we return True if it's ok to proceed with a push because all went well
@@ -322,7 +319,7 @@ class ConfPool:
 
         base_head = self.checkout_base(base)
         if not base_head:
-            return
+            return None
 
         ## find the log
         message = self.base.refs[base].commit.message
@@ -349,7 +346,7 @@ class ConfPool:
 
     def push_configurations(self,
                             base:str,
-                            release_tag:str = None,
+                            release_tag:str|None = None,
                             conf_regex: re.Pattern = re.compile(".*") ) :
 
         if not release_tag:
@@ -407,7 +404,7 @@ class ConfPool:
 
 
     def remove_configurations(self,
-                              release:str=None,
+                              release:str|None=None,
                               conf_regex: re.Pattern = re.compile(".*") ) -> list[str] :
 
         versions = self.get_daq_versions()
@@ -428,7 +425,7 @@ class ConfPool:
             try :
                 self.operation.push(f":{branch}")
                 ret.append(branch)
-            except:
+            except Exception :
                 logging.warning(f"Failed to remove {branch}")
 
         return ret

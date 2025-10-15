@@ -2,11 +2,11 @@
 
 # @file cpm-update is the executable used to interact with the ConfigPool class and propagate changes from a base branch to the relevant operation branches
 
-import click
 import logging
-import os
 import re
 from pathlib import Path
+
+import click
 
 from runconftools.ConfPool import ConfPool
 
