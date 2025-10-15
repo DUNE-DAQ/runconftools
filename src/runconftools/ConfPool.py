@@ -1,10 +1,11 @@
-import git
+import importlib
 import logging
 import os
 import re
 import sys
-import importlib
 from pathlib import Path
+
+import git
 
 
 class ConfPool:
@@ -52,8 +53,7 @@ class ConfPool:
         match = regex.match(name)
         if match :
             return match.group(1)
-        else :
-            return default
+        return default
                 
     def get_base_branches(self) -> list[str]:
         self.base.fetch()
@@ -294,7 +294,7 @@ class ConfPool:
         ## stop the process if veryfication failed
         if not very :
             logging.error(f"Verfication failed for {generator}")
-            return 
+            return None 
         
         ## validate
         if hasattr(module, "validate"):
@@ -322,7 +322,7 @@ class ConfPool:
 
         base_head = self.checkout_base(base)
         if not base_head:
-            return
+            return None
 
         ## find the log
         message = self.base.refs[base].commit.message

@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 
-import click
 import logging
-import os
 import re
 from pathlib import Path
+
+import click
 
 from runconftools.ConfPool import ConfPool
 

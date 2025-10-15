@@ -2,12 +2,11 @@
 
 # @file cpm-setup is the executable used to interact with the ConfigPool class and setup a working environment
 
-import click
 import logging
-import os
 import re
 from pathlib import Path
 
+import click
 
 from runconftools.ConfPool import ConfPool
 
