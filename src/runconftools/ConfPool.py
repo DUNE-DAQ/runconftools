@@ -15,8 +15,8 @@ class ConfPool:
         operation_url: str | None = None,
         base_url: str | None = None,
     ) -> None:
-        self.conf_regex = re.compile("^operation/([^/]+)/(.*)$")
-        self.base_regex = re.compile("^base/(.*)$")
+        self.conf_regex = re.compile(r"^operation/([^/]+)/(.*)$")
+        self.base_regex = re.compile(r"^base/(.*)$")
         self.apparatus = apparatus
         try:
             self.repo = git.Repo(path)
@@ -48,7 +48,7 @@ class ConfPool:
     @staticmethod
     def get_release(default:str = "develop") -> str :
         name = os.environ["SPACK_RELEASE"]
-        regex = re.compile("^([^-]+-v[0-9]+\.[0-9]+\.[0-9]+[^-]*)-[^-]+-[0-9]+$")
+        regex = re.compile(r"^([^-]+-v[0-9]+\.[0-9]+\.[0-9]+[^-]*)-[^-]+-[0-9]+$")
         match = regex.match(name)
         if match :
             return match.group(1)
@@ -103,7 +103,7 @@ class ConfPool:
         return self.__checkout(local_name, ref_name, self.base)
 
     def get_generators(self, base: str) -> list[str]:
-        regex = re.compile("^(?!__init__)(.*)\.py$")
+        regex = re.compile(r"^(?!__init__)(.*)\.py$")
         self.checkout_base(base)
         files = []
         path = self.repo.working_dir + "/functions/generators/" + self.apparatus
@@ -116,7 +116,7 @@ class ConfPool:
         return files
 
     def get_verifiers(self, base: str | None = None) -> list[str]:
-        regex = re.compile("^(?!__init__)(.*)\.py$")
+        regex = re.compile(r"^(?!__init__)(.*)\.py$")
         if base :
             self.checkout_base(base)
             ## otherwise just get the verifiers from the current branch
@@ -147,7 +147,7 @@ class ConfPool:
     def get_confs(
         self,
         release: re.Pattern | None = None,
-        regex: re.Pattern = re.compile(".*"),
+        regex: re.Pattern = re.compile(r".*"),
     ) -> list:
 
         if not release :
@@ -311,7 +311,7 @@ class ConfPool:
 
     def propagate_base(
         self, base: str, release_tag:str|None=None,
-            conf_regex: re.Pattern = re.compile(".*"),
+            conf_regex: re.Pattern = re.compile(r".*"),
             no_push:bool = False
     ) -> bool :    ## we return True if it's ok to proceed with a push because all went well
         if not release_tag:
@@ -347,7 +347,7 @@ class ConfPool:
     def push_configurations(self,
                             base:str,
                             release_tag:str|None = None,
-                            conf_regex: re.Pattern = re.compile(".*") ) :
+                            conf_regex: re.Pattern = re.compile(r".*") ) :
 
         if not release_tag:
             release_tag = base
@@ -405,7 +405,7 @@ class ConfPool:
 
     def remove_configurations(self,
                               release:str|None=None,
-                              conf_regex: re.Pattern = re.compile(".*") ) -> list[str] :
+                              conf_regex: re.Pattern = re.compile(r".*") ) -> list[str] :
 
         versions = self.get_daq_versions()
         
