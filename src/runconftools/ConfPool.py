@@ -1,11 +1,13 @@
 import importlib
-import logging
 import os
 import re
 import sys
 
 import git
+import logging
+from daqpytools.logging.logger import get_daq_logger
 
+logger = get_daq_logger("runconftools.ConfPool", logging.INFO)
 
 class ConfPool:
     def __init__(
@@ -21,7 +23,7 @@ class ConfPool:
         try:
             self.repo = git.Repo(path)
         except git.InvalidGitRepositoryError:
-            logging.warning("The repo in %s is empty, cloning from remotes", path)
+            logger.warning("The repo in %s is empty, cloning from remotes", path)
             self.repo = git.Repo.clone_from(url=base_url, to_path=path)
         finally:
             remotes = [r.name for r in self.repo.remotes]
@@ -31,9 +33,9 @@ class ConfPool:
                 self.repo.create_remote(name="operation", url=operation_url)
             self.base = self.repo.remote("base")
             self.operation = self.repo.remote("operation")
-            logging.info("Repo in %s set with the following remotes:", path)
+            logger.info("Repo in %s set with the following remotes:", path)
             for r in self.repo.remotes:
-                logging.info("%s -> %s", r.name, r.url)
+                logger.info("%s -> %s", r.name, r.url)
             sys.path.append(path + "/functions")
 
         ## this protection is necessary in case local base branch exist, example develop which is created by default
@@ -93,7 +95,7 @@ class ConfPool:
     def checkout_base(self, base: str) -> git.refs.head.Head:
         bases = self.get_base_branches()
         if base not in bases:
-            logging.error("%s not in the avilable base branches", base)
+            logger.error("%s not in the avilable base branches", base)
             return None
 
         ## as all the local branches will be in the form <version>/<generator> we need a name for the
@@ -180,7 +182,7 @@ class ConfPool:
             
         confs = self.get_confs(release=re.compile(release))
         if conf not in confs:
-            logging.error("%s not in the configurations for %s", conf, release)
+            logger.error("%s not in the configurations for %s", conf, release)
             return None
 
         ref_name = f"{release}/{conf}"
@@ -206,12 +208,12 @@ class ConfPool:
             ## again, too dangerous to remove things
             return []
 
-        logging.debug("Removing " + ", ".join(to_be_removed))
+        logger.debug("Removing " + ", ".join(to_be_removed))
         try :
             files = self.repo.index.remove(to_be_removed, working_tree=True)
-            logging.debug("Removed " + ", ".join(files))
+            logger.debug("Removed " + ", ".join(files))
         except Exception :
-            logging.warning("forcefully removing " + ", ".join(to_be_removed))
+            logger.warning("forcefully removing " + ", ".join(to_be_removed))
             for f in to_be_removed :
                 self.repo.git.rm("-f", f)
             files = to_be_removed
@@ -229,29 +231,29 @@ class ConfPool:
 
         confs = self.get_confs(release=re.compile(f"^{release_tag}$"))
 
-        logging.debug("Available confs: " + ", ".join(confs))
+        logger.debug("Available confs: " + ", ".join(confs))
         
         ref_name = release_tag + "/" + generator
 
         # prepare the branch
         if generator not in confs:
-            logging.info(f"New configuration {generator} created from base {base}")
+            logger.info(f"New configuration {generator} created from base {base}")
             self.checkout_base(base)
             branches = [b.name for b in self.repo.branches]
-            logging.debug(",".join(branches))
+            logger.debug(",".join(branches))
             if ref_name in branches:
                 self.repo.delete_head(ref_name, force=True)
             self.repo.create_head(ref_name).checkout()
         else:
-            logging.warning(
+            logger.warning(
                 f"Configuration {generator} overrides existing operation branch"
             )
             self.checkout_conf(generator, release=release_tag)
             # whipe out the branch
             files = self.repo.index.remove(["."], r=True, working_tree=True)
-            logging.debug("Removing " + ", ".join(files))
+            logger.debug("Removing " + ", ".join(files))
             self.repo.git.checkout(f"base/{base}", ".")
-            logging.info(f"Restore from base {base}")
+            logger.info(f"Restore from base {base}")
 
 
         # run the generator
@@ -283,14 +285,14 @@ class ConfPool:
         self.remove_unused_sessions()
         
         ## verfication which might produce files 
-        logging.info("---- Verification ----")
+        logger.info("---- Verification ----")
         very = self.verify()
 
         self.commit(message)
 
         ## stop the process if veryfication failed
         if not very :
-            logging.error(f"Verfication failed for {generator}")
+            logger.error(f"Verfication failed for {generator}")
             return None 
         
         ## validate
@@ -298,10 +300,10 @@ class ConfPool:
             valctor = getattr(module, "validate")
             res = valctor(self.repo.working_dir)
             if not res :
-                logging.error(f"Validation failed for {generator}")
+                logger.error(f"Validation failed for {generator}")
                 return res
         else:
-            logging.warning(f"{generator} has no validation")
+            logger.warning(f"{generator} has no validation")
         
         # push the branch
         if not no_push :
@@ -328,10 +330,10 @@ class ConfPool:
         ret = True
         for g in generators:
             if conf_regex.match(g):
-                logging.info("\n")
-                logging.info("---------------------------------------------")
-                logging.info(f"Generating {g}")
-                logging.info("---------------------------------------------")
+                logger.info("\n")
+                logger.info("---------------------------------------------")
+                logger.info(f"Generating {g}")
+                logger.info("---------------------------------------------")
                 try :
                     result = self.generate_conf( base=base, generator=g, release_tag=release_tag,
                                                  log_message=message, no_push=no_push
@@ -339,7 +341,7 @@ class ConfPool:
                     if not result :
                         ret = False
                 except Exception as e:
-                    logging.error(f"Exception raised when trying to generate {g}: {e}")
+                    logger.error(f"Exception raised when trying to generate {g}: {e}")
                     ret = False
                    
         return ret
@@ -362,23 +364,23 @@ class ConfPool:
             if conf_regex.match(g):
                 ref_name = f"{release_tag}/{g}"
                 if ref_name in local_branches :
-                    logging.info(f"Pushing {ref_name} to {self.apparatus} operations")
+                    logger.info(f"Pushing {ref_name} to {self.apparatus} operations")
                     self.operation.push(f"{ref_name}")
 
     def verify(self) -> bool :
         verifiers = self.get_verifiers()
         if not verifiers :
-            logging.warning("No verfiers are available")
+            logger.warning("No verfiers are available")
         for v in verifiers:
             module_name = "verifiers."+v
             module = importlib.import_module(module_name)
             functor = getattr(module, "verify")
             res = functor(self.repo.working_dir)
             if not res :
-                logging.error(f"{v} failed")
+                logger.error(f"{v} failed")
                 return False
 
-        logging.info("Verification successful!")
+        logger.info("Verification successful!")
         return True
             
         
@@ -389,14 +391,14 @@ class ConfPool:
             return
 
         file_list = files.split("\n")
-        logging.debug("Files that changed: " + ", ".join(file_list))
+        logger.debug("Files that changed: " + ", ".join(file_list))
         for f in file_list:
             self.repo.git.add(f)
             
         ## add possible additional file in case they are useful for backup
         files = self.repo.untracked_files
         for f in files :
-            logging.info(f"Adding new file: {f}")
+            logger.info(f"Adding new file: {f}")
             self.repo.git.add(f)
 
         # commit
@@ -410,11 +412,11 @@ class ConfPool:
         versions = self.get_daq_versions()
         
         if not release:
-            logging.warning("No release specified, nothing is removed")
+            logger.warning("No release specified, nothing is removed")
             return []
 
         if release not in versions :
-            logging.warning(f"{release} not among the available versions")
+            logger.warning(f"{release} not among the available versions")
             return []
 
         confs = self.get_confs(release=re.compile("^"+release+"$"),
@@ -426,7 +428,7 @@ class ConfPool:
                 self.operation.push(f":{branch}")
                 ret.append(branch)
             except Exception :
-                logging.warning(f"Failed to remove {branch}")
+                logger.warning(f"Failed to remove {branch}")
 
         return ret
 
