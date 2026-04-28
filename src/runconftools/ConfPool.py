@@ -3,6 +3,7 @@ import logging
 import os
 import re
 import sys
+from time import perf_counter
 
 import git
 
@@ -18,23 +19,34 @@ class ConfPool:
         self.conf_regex = re.compile(r"^operation/([^/]+)/(.*)$")
         self.base_regex = re.compile(r"^base/(.*)$")
         self.apparatus = apparatus
+        
+        self._fetch_time: int | None = None
+        
         try:
             self.repo = git.Repo(path)
         except git.InvalidGitRepositoryError:
             logging.warning("The repo in %s is empty, cloning from remotes", path)
             self.repo = git.Repo.clone_from(url=base_url, to_path=path)
-        finally:
-            remotes = [r.name for r in self.repo.remotes]
-            if "base" not in remotes:
-                self.repo.create_remote(name="base", url=base_url)
-            if "operation" not in remotes:
-                self.repo.create_remote(name="operation", url=operation_url)
-            self.base = self.repo.remote("base")
-            self.operation = self.repo.remote("operation")
-            logging.info("Repo in %s set with the following remotes:", path)
-            for r in self.repo.remotes:
-                logging.info("%s -> %s", r.name, r.url)
-            sys.path.append(path + "/functions")
+
+        remotes = [r.name for r in self.repo.remotes]
+
+        if "base" not in remotes:
+            if base_url is None:
+                raise ValueError("base_url must be provided if the base remote is not set")
+            
+            self.repo.create_remote(name="base", url=base_url)
+        if "operation" not in remotes:
+            if operation_url is None:
+                raise ValueError("operation_url must be provided if the operation remote is not set")
+            
+            self.repo.create_remote(name="operation", url=operation_url)
+
+        self.base = self.repo.remote("base")
+        self.operation = self.repo.remote("operation")
+        logging.info("Repo in %s set with the following remotes:", path)
+        for r in self.repo.remotes:
+            logging.info("%s -> %s", r.name, r.url)
+        sys.path.append(path + "/functions")
 
         ## this protection is necessary in case local base branch exist, example develop which is created by default
         ## In principle this could be done on any branch that does not respect the branch structure
@@ -44,6 +56,7 @@ class ConfPool:
         for b in bases:
             if b in branches:
                 self.repo.refs[b].rename(f"{b}/____BASE____")
+    
 
     @staticmethod
     def get_release(default:str = "develop") -> str :
