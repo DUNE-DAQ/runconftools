@@ -20,7 +20,7 @@ class FetchTimedRemote(git.Remote):
     def fetch(self, *args, **kwargs):
         current_fetch_time = perf_counter()
         if self._fetch_time is not None and current_fetch_time - self._fetch_time < self.FETCH_TIMEOUT:
-            logging.info(f"Fetch called again within {self.FETCH_TIMEOUT} seconds, skipping fetch")
+            logging.debug(f"Fetch called again within {self.FETCH_TIMEOUT} seconds, skipping fetch")
             return
 
         self._fetch_time = current_fetch_time
