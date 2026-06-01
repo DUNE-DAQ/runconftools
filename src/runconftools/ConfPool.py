@@ -19,9 +19,7 @@ class ConfPool:
         self.conf_regex = re.compile(r"^operation/([^/]+)/(.*)$")
         self.base_regex = re.compile(r"^base/(.*)$")
         self.apparatus = apparatus
-        
-        self._fetch_time: int | None = None
-        
+                
         try:
             self.repo = git.Repo(path)
         except git.InvalidGitRepositoryError:
