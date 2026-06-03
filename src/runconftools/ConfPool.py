@@ -73,6 +73,7 @@ class ConfPool:
         for b in bases:
             if b in branches:
                 self.repo.refs[b].rename(f"{b}/____BASE____")
+    
 
     @staticmethod
     def get_release(default:str = "develop") -> str :
