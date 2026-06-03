@@ -374,6 +374,36 @@ class ConfPool:
                     logging.info(f"Pushing {ref_name} to {self.apparatus} operations")
                     self.operation.push(f"{ref_name}")
 
+    def clean(self,
+              base:str,
+              release_tag:str|None = None) -> list[str] :
+                        
+        if not release_tag:
+            release_tag = base
+            
+        base_head = self.checkout_base(base)
+        if not base_head:
+            return []
+
+        generators = self.get_generators(base)
+        confs = self.get_confs(release=re.compile(f"^{release_tag}$"))
+
+        logging.debug("Available confs: " + ", ".join(confs))
+        logging.debug("Available generators: " + ", ".join(confs))
+
+        ret = []
+        for c in confs :
+            if c not in generators :
+                branch = f"{release}/{c}"
+                try :
+                    logging.info(f"Removing {branch} to {self.apparatus} operations")
+                    self.operation.push(f":{branch}")
+                    ret.append(branch)
+                except Exception :
+                    logging.warning(f"Failed to remove {branch}")
+
+        return ret
+
     def verify(self) -> bool :
         verifiers = self.get_verifiers()
         if not verifiers :
