@@ -9,18 +9,17 @@ import git
 
 class FetchTimedRemote(git.Remote):
     '''
-    HW: Wrapper around remote, times fetch calls and skips if called again in a FETCH_TIMEOUT second window
+    HW: Wrapper around remote, times fetch calls and skips if called again in a fetch_time second window [defaults to 30s]
     '''
-    FETCH_TIMEOUT = 30  # seconds
-
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, fetch_timeout: float = 30.0, **kwargs):
         super().__init__(*args, **kwargs)
+        self.fetch_timeout = fetch_timeout
         self._fetch_time: float | None = None
 
     def fetch(self, *args, **kwargs):
         current_fetch_time = perf_counter()
-        if self._fetch_time is not None and current_fetch_time - self._fetch_time < self.FETCH_TIMEOUT:
-            logging.debug(f"Fetch called again within {self.FETCH_TIMEOUT} seconds, skipping fetch")
+        if self._fetch_time is not None and current_fetch_time - self._fetch_time < self.fetch_timeout:
+            logging.debug(f"Fetch called again within {self.fetch_timeout} seconds, skipping fetch")
             return
 
         self._fetch_time = current_fetch_time
@@ -28,8 +27,8 @@ class FetchTimedRemote(git.Remote):
 
 
 class FetchTimedRepo(git.Repo):
-    def remote(self, name: str = "origin")->"FetchTimedRemote":
-        r = FetchTimedRemote(self, name)
+    def remote(self, name: str = "origin", fetch_timeout: float = 30.0)->"FetchTimedRemote":
+        r = FetchTimedRemote(self, name, fetch_timeout=fetch_timeout)
         if not r.exists():
             raise ValueError("Remote named '%s' didn't exist" % name)
         return r
@@ -42,10 +41,12 @@ class ConfPool:
         apparatus: str = "np02",
         operation_url: str | None = None,
         base_url: str | None = None,
+        fetch_timeout: float = 30.0
     ) -> None:
         self.conf_regex = re.compile(r"^operation/([^/]+)/(.*)$")
         self.base_regex = re.compile(r"^base/(.*)$")
         self.apparatus = apparatus
+        
         try:
             self.repo = FetchTimedRepo(path)
         except git.InvalidGitRepositoryError:
@@ -57,8 +58,8 @@ class ConfPool:
                 self.repo.create_remote(name="base", url=base_url)
             if "operation" not in remotes:
                 self.repo.create_remote(name="operation", url=operation_url)
-            self.base = self.repo.remote("base")
-            self.operation = self.repo.remote("operation")
+            self.base = self.repo.remote("base", fetch_timeout=fetch_timeout)
+            self.operation = self.repo.remote("operation", fetch_timeout=fetch_timeout)
             logging.info("Repo in %s set with the following remotes:", path)
             for r in self.repo.remotes:
                 logging.info("%s -> %s", r.name, r.url)
