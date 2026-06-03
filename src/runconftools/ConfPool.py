@@ -399,6 +399,7 @@ class ConfPool:
             if c not in generators :
                 branch = f"{release_tag}/{c}"
                 if branch == default :
+                    log.debug(f"{branch} is not removed because it's the remote default")
                     continue
                 try :
                     logging.info(f"Removing {branch} to {self.apparatus} operations")
@@ -470,6 +471,7 @@ class ConfPool:
         for c in confs :
             branch = f"{release}/{c}"
             if branch == default :
+                log.debug(f"{branch} is not removed because it's the remote default")
                 continue
             try :
                 self.operation.push(f":{branch}")
