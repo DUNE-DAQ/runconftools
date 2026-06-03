@@ -391,10 +391,15 @@ class ConfPool:
         logging.debug("Available confs: " + ", ".join(confs))
         logging.debug("Available generators: " + ", ".join(confs))
 
+        ## while removing we have to be careful to not remove the default branch
+        default = self.default_operation_branch()
+                
         ret = []
         for c in confs :
             if c not in generators :
-                branch = f"{release}/{c}"
+                branch = f"{release_tag}/{c}"
+                if branch == default :
+                    continue
                 try :
                     logging.info(f"Removing {branch} to {self.apparatus} operations")
                     self.operation.push(f":{branch}")
@@ -458,9 +463,14 @@ class ConfPool:
 
         confs = self.get_confs(release=re.compile("^"+release+"$"),
                                regex=conf_regex)
+
+        default = self.default_operation_branch()
+        
         ret = []
         for c in confs :
             branch = f"{release}/{c}"
+            if branch == default :
+                continue
             try :
                 self.operation.push(f":{branch}")
                 ret.append(branch)
@@ -468,6 +478,11 @@ class ConfPool:
                 logging.warning(f"Failed to remove {branch}")
 
         return ret
+
+    def default_operation_branch(self) -> str :
+        ref = self.operation.refs["HEAD"]
+        branch = ref.ref.name.split("/")[-1]
+        return branch
 
 #    def tag( self,
 #             base_ref,
