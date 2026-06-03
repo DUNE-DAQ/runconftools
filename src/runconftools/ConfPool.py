@@ -482,9 +482,11 @@ class ConfPool:
         return ret
 
     def default_operation_branch(self) -> str :
-        ref = self.operation.refs["HEAD"]
-        branch = ref.ref.name.split("/")[-1]
-        return branch
+        output = self.repo.git.ls_remote("--symref", self.operation.url, "HEAD")
+        for line in output.splitlines():
+            if line.startswith("ref:"):
+                default_branch = line.split("refs/heads/")[1].split("\t")[0]
+                return default_branch
 
 #    def tag( self,
 #             base_ref,
