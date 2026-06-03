@@ -44,6 +44,16 @@ class ConfPool:
             logging.info("%s -> %s", r.name, r.url)
         sys.path.append(path + "/functions")
 
+        ## in some places it is useful to know the defaul branch of the operation repository
+        ## so it's set here
+        output = self.repo.git.ls_remote("--symref", self.operation.url, "HEAD")
+        for line in output.splitlines():
+            if line.startswith("ref:"):
+                default_branch = line.split("refs/heads/")[1].split("\t")[0]
+                self.operation_default = default_branch
+
+        logging.info(f"Branch {self.operation_default} will be ignored")
+
         ## this protection is necessary in case local base branch exist, example develop which is created by default
         ## In principle this could be done on any branch that does not respect the branch structure
         ## But I prefer to have the error exposed and deal with the specifics in a case by case manner
@@ -166,6 +176,9 @@ class ConfPool:
         branches = [r.name for r in self.operation.refs]
         confs = []
         for b in branches:
+            ## we ignore the default because it's confusing
+            if self.operation_default in b:
+                continue
             match = self.conf_regex.match(b)
             if match:
                 r = match.group(1)
@@ -392,13 +405,11 @@ class ConfPool:
         logging.debug("Available generators: " + ", ".join(confs))
 
         ## while removing we have to be careful to not remove the default branch
-        default = self.default_operation_branch()
-                
         ret = []
         for c in confs :
             if c not in generators :
                 branch = f"{release_tag}/{c}"
-                if branch == default :
+                if branch == self.operation_default :
                     log.debug(f"{branch} is not removed because it's the remote default")
                     continue
                 try :
@@ -465,12 +476,10 @@ class ConfPool:
         confs = self.get_confs(release=re.compile("^"+release+"$"),
                                regex=conf_regex)
 
-        default = self.default_operation_branch()
-        
         ret = []
         for c in confs :
             branch = f"{release}/{c}"
-            if branch == default :
+            if branch == selt.operation_default :
                 log.debug(f"{branch} is not removed because it's the remote default")
                 continue
             try :
@@ -480,13 +489,6 @@ class ConfPool:
                 logging.warning(f"Failed to remove {branch}")
 
         return ret
-
-    def default_operation_branch(self) -> str :
-        output = self.repo.git.ls_remote("--symref", self.operation.url, "HEAD")
-        for line in output.splitlines():
-            if line.startswith("ref:"):
-                default_branch = line.split("refs/heads/")[1].split("\t")[0]
-                return default_branch
 
 #    def tag( self,
 #             base_ref,
