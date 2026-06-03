@@ -3,7 +3,35 @@ import logging
 import os
 import re
 import sys
+from time import perf_counter
+
 import git
+
+class FetchTimedRemote(git.Remote):
+    '''
+    HW: Wrapper around remote, times fetch calls and skips if called again in a fetch_time second window [defaults to 30s]
+    '''
+    def __init__(self, *args, fetch_timeout: float = 30.0, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fetch_timeout = fetch_timeout
+        self._fetch_time: float | None = None
+
+    def fetch(self, *args, **kwargs):
+        current_fetch_time = perf_counter()
+        if self._fetch_time is not None and current_fetch_time - self._fetch_time < self.fetch_timeout:
+            logging.debug(f"Fetch called again within {self.fetch_timeout} seconds, skipping fetch")
+            return
+
+        self._fetch_time = current_fetch_time
+        super().fetch(*args, **kwargs)
+
+
+class FetchTimedRepo(git.Repo):
+    def remote(self, name: str = "origin", fetch_timeout: float = 30.0)->"FetchTimedRemote":
+        r = FetchTimedRemote(self, name, fetch_timeout=fetch_timeout)
+        if not r.exists():
+            raise ValueError("Remote named '%s' didn't exist" % name)
+        return r
 
 
 class ConfPool:
@@ -13,32 +41,25 @@ class ConfPool:
         apparatus: str = "np02",
         operation_url: str | None = None,
         base_url: str | None = None,
+        fetch_timeout: float = 30.0
     ) -> None:
         self.conf_regex = re.compile(r"^operation/([^/]+)/(.*)$")
         self.base_regex = re.compile(r"^base/(.*)$")
         self.apparatus = apparatus
-                
+        
         try:
-            self.repo = git.Repo(path)
+            self.repo = FetchTimedRepo(path)
         except git.InvalidGitRepositoryError:
             logging.warning("The repo in %s is empty, cloning from remotes", path)
-            self.repo = git.Repo.clone_from(url=base_url, to_path=path)
+            self.repo = FetchTimedRepo.clone_from(url=base_url, to_path=path)
 
         remotes = [r.name for r in self.repo.remotes]
-
         if "base" not in remotes:
-            if base_url is None:
-                raise ValueError("base_url must be provided if the base remote is not set")
-            
             self.repo.create_remote(name="base", url=base_url)
         if "operation" not in remotes:
-            if operation_url is None:
-                raise ValueError("operation_url must be provided if the operation remote is not set")
-            
             self.repo.create_remote(name="operation", url=operation_url)
-
-        self.base = self.repo.remote("base")
-        self.operation = self.repo.remote("operation")
+        self.base = self.repo.remote("base", fetch_timeout=fetch_timeout)
+        self.operation = self.repo.remote("operation", fetch_timeout=fetch_timeout)
         logging.info("Repo in %s set with the following remotes:", path)
         for r in self.repo.remotes:
             logging.info("%s -> %s", r.name, r.url)
@@ -62,7 +83,7 @@ class ConfPool:
         if match :
             return match.group(1)
         return default
-                
+
     def get_base_branches(self) -> list[str]:
         self.base.fetch()
         branches = [r.name for r in self.base.refs]
@@ -97,7 +118,7 @@ class ConfPool:
         remote.pull(f"{ref_name}:{local_name}")
         self.setup_conf_path()
         return head
-            
+
 
     def checkout_base(self, base: str) -> git.refs.head.Head:
         bases = self.get_base_branches()
@@ -129,7 +150,7 @@ class ConfPool:
         if base :
             self.checkout_base(base)
             ## otherwise just get the verifiers from the current branch
-            
+
         files = []
         path = self.repo.working_dir + "/functions/verifiers"
         if os.path.isdir(path):
@@ -161,7 +182,7 @@ class ConfPool:
 
         if not release :
             release = re.compile("^"+self.get_release()+"$")
-            
+
         self.operation.fetch()
         branches = [r.name for r in self.operation.refs]
         confs = []
@@ -185,8 +206,8 @@ class ConfPool:
     ) -> git.refs.head.Head:
 
         if not release :
-            release =  self.get_release()
-            
+            release = self.get_release()
+
         confs = self.get_confs(release=re.compile(release))
         if conf not in confs:
             logging.error("%s not in the configurations for %s", conf, release)
@@ -196,7 +217,7 @@ class ConfPool:
         return self.__checkout(ref_name, ref_name, self.operation)
 
     def remove_unused_sessions(self) -> list[str] :
-                
+
         # file to be saved
         base_module_name = "common."+self.apparatus + ".config_base"
         base_module = None
@@ -224,11 +245,11 @@ class ConfPool:
             for f in to_be_removed :
                 self.repo.git.rm("-f", f)
             files = to_be_removed
-        
-        return files
-        
 
-    
+        return files
+
+
+
     def generate_conf(
             self, base: str, generator: str,
             release_tag: str | None = None, log_message: str | None = None, no_push:bool = False
@@ -239,7 +260,7 @@ class ConfPool:
         confs = self.get_confs(release=re.compile(f"^{release_tag}$"))
 
         logging.debug("Available confs: " + ", ".join(confs))
-        
+
         ref_name = release_tag + "/" + generator
 
         # prepare the branch
@@ -290,8 +311,8 @@ class ConfPool:
             return res
 
         self.remove_unused_sessions()
-        
-        ## verfication which might produce files 
+
+        ## verfication which might produce files
         logging.info("---- Verification ----")
         very = self.verify()
 
@@ -300,8 +321,8 @@ class ConfPool:
         ## stop the process if veryfication failed
         if not very :
             logging.error(f"Verfication failed for {generator}")
-            return None 
-        
+            return None
+
         ## validate
         if hasattr(module, "validate"):
             valctor = getattr(module, "validate")
@@ -311,11 +332,11 @@ class ConfPool:
                 return res
         else:
             logging.warning(f"{generator} has no validation")
-        
+
         # push the branch
         if not no_push :
             self.operation.push(f"{ref_name}")
-            
+
         return res
 
     def propagate_base(
@@ -350,7 +371,7 @@ class ConfPool:
                 except Exception as e:
                     logging.error(f"Exception raised when trying to generate {g}: {e}")
                     ret = False
-                   
+
         return ret
 
     def push_configurations(self,
@@ -360,7 +381,7 @@ class ConfPool:
 
         if not release_tag:
             release_tag = base
-            
+
         base_head = self.checkout_base(base)
         if not base_head:
             return
@@ -389,8 +410,8 @@ class ConfPool:
 
         logging.info("Verification successful!")
         return True
-            
-        
+
+
     def commit(self, message: str):
         # find the changes
         files = self.repo.git.diff(None, name_only=True)
@@ -401,7 +422,7 @@ class ConfPool:
         logging.debug("Files that changed: " + ", ".join(file_list))
         for f in file_list:
             self.repo.git.add(f)
-            
+
         ## add possible additional file in case they are useful for backup
         files = self.repo.untracked_files
         for f in files :
@@ -417,7 +438,7 @@ class ConfPool:
                               conf_regex: re.Pattern = re.compile(r".*") ) -> list[str] :
 
         versions = self.get_daq_versions()
-        
+
         if not release:
             logging.warning("No release specified, nothing is removed")
             return []
