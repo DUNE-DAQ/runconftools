@@ -428,17 +428,19 @@ class ConfPool:
         ## while removing we have to be careful to not remove the default branch
         ret = []
         for c in confs :
-            if c not in generators :
-                branch = f"{release_tag}/{c}"
-                if branch == self.operation_default :
-                    log.debug(f"{branch} is not removed because it's the remote default")
-                    continue
-                try :
-                    logging.info(f"Removing {branch} to {self.apparatus} operations")
-                    self.operation.push(f":{branch}")
-                    ret.append(branch)
-                except Exception :
-                    logging.warning(f"Failed to remove {branch}")
+            if c in generators :
+                continue
+            
+            branch = f"{release_tag}/{c}"
+            if branch == self.operation_default :
+                log.debug(f"{branch} is not removed because it's the remote default")
+                continue
+            try :
+                logging.info(f"Removing {branch} to {self.apparatus} operations")
+                self.operation.push(f":{branch}")
+                ret.append(branch)
+            except Exception :
+                logging.warning(f"Failed to remove {branch}")
 
         return ret
 
