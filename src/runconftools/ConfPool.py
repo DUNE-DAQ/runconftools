@@ -71,9 +71,10 @@ class ConfPool:
         for line in output.splitlines():
             if line.startswith("ref:"):
                 default_branch = line.split("refs/heads/")[1].split("\t")[0]
-                self.operation_default = default_branch
-
-        logging.info(f"Branch {self.operation_default} will be ignored")
+                                
+        logging.info(f"Branch {default_branch} will be ignored in operation")
+        self.default_regex = re.compile(f"{default_branch}$")  ## we only check that it ends with this name
+        
 
         ## this protection is necessary in case local base branch exist, example develop which is created by default
         ## In principle this could be done on any branch that does not respect the branch structure
@@ -128,8 +129,7 @@ class ConfPool:
         remote.pull(f"{ref_name}:{local_name}")
         self.setup_conf_path()
         return head
-
-
+    
     def checkout_base(self, base: str) -> git.refs.head.Head:
         bases = self.get_base_branches()
         if base not in bases:
@@ -198,7 +198,7 @@ class ConfPool:
         confs = []
         for b in branches:
             ## we ignore the default because it's confusing
-            if self.operation_default in b:
+            if self.is_default_branch(b) :
                 continue
             match = self.conf_regex.match(b)
             if match:
@@ -229,6 +229,10 @@ class ConfPool:
         ref_name = f"{release}/{conf}"
         return self.__checkout(ref_name, ref_name, self.operation)
 
+    def is_default_branch(self, branch:str) -> bool :
+        return self.default_regex.match(branch)
+        
+    
     def remove_unused_sessions(self) -> list[str] :
 
         # file to be saved
@@ -432,7 +436,7 @@ class ConfPool:
                 continue
             
             branch = f"{release_tag}/{c}"
-            if branch == self.operation_default :
+            if self.is_default_branch(branch) :
                 log.debug(f"{branch} is not removed because it's the remote default")
                 continue
             try :
@@ -502,7 +506,7 @@ class ConfPool:
         ret = []
         for c in confs :
             branch = f"{release}/{c}"
-            if branch == selt.operation_default :
+            if self.is_default_branch(branch) :
                 log.debug(f"{branch} is not removed because it's the remote default")
                 continue
             try :
