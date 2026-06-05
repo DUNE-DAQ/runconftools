@@ -75,8 +75,15 @@ def main(path, apparatus, base_url, operation_url, base, release, conf, push_onl
 
     if (not all_ok) and push :
         logging.fatal("Something went wrong in the generation phase so the push is not performed")
+        return
         
     if (push and all_ok) or push_only :
         pool.push_configurations(base=base, release_tag=release, conf_regex=re.compile(conf))
+
+    if (push or push_only) :
+        logging.info("Removing configurations whose generators are gone")
+        removals = pool.clean(base=base, release_tag=release)
+        if not removals:
+            logging.info("Nothing to remove")
 
 
