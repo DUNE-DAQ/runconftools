@@ -73,7 +73,7 @@ class ConfPool:
                 default_branch = line.split("refs/heads/")[1].split("\t")[0]
                                 
         logging.info(f"Branch {default_branch} will be ignored in operation")
-        self.default_regex = re.compile(f"^(?:[^\/]+\/)?{default_branch}$")  ## we only check that it ends with this name
+        self.default_regex = re.compile(rf"^(?:[^/]+/)?{default_branch}$")  ## we only check that it ends with this name
         
 
         ## this protection is necessary in case local base branch exist, example develop which is created by default
