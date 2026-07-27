@@ -17,3 +17,10 @@ class Apparatus(Enum):
     def values(cls) -> list[str]:
         return [c.value for c in cls]
 
+    def https_url(self) -> str :
+        match self :
+            case Apparatus.NP02 : return "https://gitlab.cern.ch/dune-daq/online/np02-configs-operation.git"
+            case Apparatus.NP04 : return "https://gitlab.cern.ch/dune-daq/online/np04-configs-operation.git"
+            case Apparatus.NP02_EMU : return "https://gitlab.cern.ch/dune-daq/online/np02-emu-configs.git"
+            case _ raise ValueError(f"{self.value} is missing the https URL")
+

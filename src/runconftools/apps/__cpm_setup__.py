@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 # @file cpm-setup is the executable used to interact with the ConfigPool class and setup a working environment
+import Apparatus from Apparatus
 
 import logging
 import re
@@ -14,7 +15,7 @@ from runconftools.ConfPool import ConfPool
 @click.command(context_settings={'show_default': True})
 @click.argument("path", type=click.Path(exists=False, file_okay=False, writable=True))
 @click.option("-a", "--apparatus",
-              type=click.Choice(['np02', 'np04'], case_sensitive=True),
+              type=click.Choice(Apparatus.values(), case_sensitive=True),
               default="np02", help="Selection of the apparatus")
 @click.option(
     "--base_url",
@@ -57,7 +58,7 @@ def main(path, apparatus, base_url, operation_url, release, base, conf, debug):
 
     Path(path).mkdir(parents=True, exist_ok=True)
 
-    pool = ConfPool(path, operation_url=operation_url, base_url=base_url, apparatus=apparatus)
+    pool = ConfPool(path, operation_url=operation_url, base_url=base_url, apparatus=Apparatus.from_string(apparatus))
 
     bases = pool.get_base_branches()
     logging.info("Available bases: {}".format(", ".join(bases)))
