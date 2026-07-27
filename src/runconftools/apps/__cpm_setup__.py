@@ -51,14 +51,13 @@ def main(path, apparatus, base_url, operation_url, release, base, conf, debug):
                          datefmt="%Y-%m-%d %H:%M:%S",
     )
 
+    apparatus_enum = Apparatus.from_string(apparatus)
     if not operation_url :
-        match apparatus :
-            case "np02" : operation_url = "https://gitlab.cern.ch/dune-daq/online/np02-configs-operation.git"
-            case "np04" : operation_url = "https://gitlab.cern.ch/dune-daq/online/np04-configs-operation.git"
+        operation_url = apparatus_enum.https_url()
 
     Path(path).mkdir(parents=True, exist_ok=True)
 
-    pool = ConfPool(path, operation_url=operation_url, base_url=base_url, apparatus=Apparatus.from_string(apparatus))
+    pool = ConfPool(path, operation_url=operation_url, base_url=base_url, apparatus=apparatus_enum)
 
     bases = pool.get_base_branches()
     logging.info("Available bases: {}".format(", ".join(bases)))
