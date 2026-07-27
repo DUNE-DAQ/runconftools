@@ -1,3 +1,5 @@
+import Apparatus from Apparatus
+
 import importlib
 import logging
 import os
@@ -38,7 +40,7 @@ class ConfPool:
     def __init__(
         self,
         path:str,
-        apparatus: str = "np02",
+        apparatus: Apparatus = Apparatus.NP02,
         operation_url: str | None = None,
         base_url: str | None = None,
         fetch_timeout: float = 30.0
@@ -146,7 +148,7 @@ class ConfPool:
         regex = re.compile(r"^(?!__init__)(.*)\.py$")
         self.checkout_base(base)
         files = []
-        path = self.repo.working_dir + "/functions/generators/" + self.apparatus
+        path = self.repo.working_dir + "/functions/generators/" + self.apparatus.value
         if os.path.isdir(path):
             for f in os.listdir(path):
                 if os.path.isfile(os.path.join(path, f)):
@@ -236,7 +238,7 @@ class ConfPool:
     def remove_unused_sessions(self) -> list[str] :
 
         # file to be saved
-        base_module_name = "common."+self.apparatus + ".config_base"
+        base_module_name = "common."+self.apparatus.value + ".config_base"
         base_module = None
         try :
             base_module = importlib.import_module(base_module_name)
@@ -303,7 +305,7 @@ class ConfPool:
 
         # run the generator
         ## link the module
-        module_name = "generators."+self.apparatus + "." + generator
+        module_name = "generators."+self.apparatus.value + "." + generator
         module = importlib.import_module(module_name)
 
         ## get the function
@@ -409,7 +411,7 @@ class ConfPool:
             if conf_regex.match(g):
                 ref_name = f"{release_tag}/{g}"
                 if ref_name in local_branches :
-                    logging.info(f"Pushing {ref_name} to {self.apparatus} operations")
+                    logging.info(f"Pushing {ref_name} to {self.apparatus.value} operations")
                     self.operation.push(f"{ref_name}")
 
     def clean(self,
@@ -440,7 +442,7 @@ class ConfPool:
                 log.debug(f"{branch} is not removed because it's the remote default")
                 continue
             try :
-                logging.info(f"Removing {branch} to {self.apparatus} operations")
+                logging.info(f"Removing {branch} to {self.apparatus.value} operations")
                 self.operation.push(f":{branch}")
                 ret.append(branch)
             except Exception :
