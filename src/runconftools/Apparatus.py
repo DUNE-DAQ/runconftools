@@ -1,3 +1,5 @@
+from enum import Enum
+
 class Apparatus(Enum):
     NP02 = "np02"
     NP04 = "np04"
@@ -22,5 +24,6 @@ class Apparatus(Enum):
             case Apparatus.NP02 : return "https://gitlab.cern.ch/dune-daq/online/np02-configs-operation.git"
             case Apparatus.NP04 : return "https://gitlab.cern.ch/dune-daq/online/np04-configs-operation.git"
             case Apparatus.NP02_EMU : return "https://gitlab.cern.ch/dune-daq/online/np02-emu-configs.git"
-            case _ raise ValueError(f"{self.value} is missing the https URL")
+
+        raise ValueError(f"{self.value} is missing the https URL")
 

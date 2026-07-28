@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 # @file cpm-setup is the executable used to interact with the ConfigPool class and setup a working environment
-import Apparatus from Apparatus
+from runconftools.Apparatus import Apparatus 
 
 import logging
 import re

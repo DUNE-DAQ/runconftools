@@ -1,4 +1,4 @@
-import Apparatus from Apparatus
+from runconftools.Apparatus import Apparatus 
 
 import importlib
 import logging
