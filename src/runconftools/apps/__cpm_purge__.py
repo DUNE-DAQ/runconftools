@@ -6,13 +6,14 @@ from pathlib import Path
 
 import click
 
+from runconftools.Apparatus import Apparatus 
 from runconftools.ConfPool import ConfPool
 
 
 @click.command(context_settings={'show_default': True}) 
 @click.argument("path", type=click.Path(exists=False, file_okay=False, writable=True))
 @click.option("-a", "--apparatus",
-              type=click.Choice(['np02', 'np04'], case_sensitive=True),
+              type=click.Choice(Apparatus.values(), case_sensitive=True),
               default="np02", help="Selection of the apparatus")
 @click.option(
     "--base_url",
@@ -50,14 +51,13 @@ def main(path, apparatus, base_url, operation_url, release, conf, debug):
         datefmt="%Y-%m-%d %H:%M:%S",
     )
 
+    apparatus_enum = Apparatus.from_string(apparatus)
     if not operation_url :
-        match apparatus :
-            case "np02" : operation_url = "ssh://git@gitlab.cern.ch:7999/dune-daq/online/np02-configs-operation.git"
-            case "np04" : operation_url = "ssh://git@gitlab.cern.ch:7999/dune-daq/online/np04-configs-operation.git"
+        operation_url = apparatus_enum.ssh_url()
 
     Path(path).mkdir(parents=True, exist_ok=True)
 
-    pool = ConfPool(path, operation_url=operation_url, base_url=base_url, apparatus=apparatus)
+    pool = ConfPool(path, operation_url=operation_url, base_url=base_url, apparatus=apparatus_enum)
 
     removed = pool.remove_configurations(release=release, conf_regex=re.compile(conf))
     logging.info("Removed branches: %s", ", ".join(removed))
