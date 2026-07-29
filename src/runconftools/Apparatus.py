@@ -4,6 +4,7 @@ class Apparatus(Enum):
     NP02 = "np02"
     NP04 = "np04"
     NP02_EMU = "np02_emu"
+    NP04_EMU = "np04_emu"
 
     def __str__(self):
         return self.value
