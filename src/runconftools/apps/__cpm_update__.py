@@ -1,16 +1,14 @@
 #!/usr/bin/env python3
 
 # @file cpm-update is the executable used to interact with the ConfigPool class and propagate changes from a base branch to the relevant operation branches
-from runconftools.Apparatus import Apparatus 
-from runconftools.ConfPool import ConfPool
-
 import logging
 import re
 from pathlib import Path
 
 import click
 
-
+from runconftools.Apparatus import Apparatus 
+from runconftools.ConfPool import ConfPool
 
 
 @click.command(context_settings={'show_default': True}) 
