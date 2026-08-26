@@ -1,20 +1,20 @@
 #!/usr/bin/env python3
 
 # @file cpm-update is the executable used to interact with the ConfigPool class and propagate changes from a base branch to the relevant operation branches
-
 import logging
 import re
 from pathlib import Path
 
 import click
 
+from runconftools.Apparatus import Apparatus 
 from runconftools.ConfPool import ConfPool
 
 
 @click.command(context_settings={'show_default': True}) 
 @click.argument("path", type=click.Path(exists=False, file_okay=False, readable=True, writable=True))
 @click.option("-a", "--apparatus",
-              type=click.Choice(['np02', 'np04'], case_sensitive=True),
+              type=click.STRING, 
               default="np02", help="Selection of the apparatus")
 @click.option(
     "--base_url",
@@ -59,10 +59,10 @@ def main(path, apparatus, base_url, operation_url, base, release, conf, push_onl
         datefmt="%Y-%m-%d %H:%M:%S",
     )
 
+
     if not operation_url :
-        match apparatus :
-            case "np02" : operation_url = "ssh://git@gitlab.cern.ch:7999/dune-daq/online/np02-configs-operation.git"
-            case "np04" : operation_url = "ssh://git@gitlab.cern.ch:7999/dune-daq/online/np04-configs-operation.git"
+        apparatus_enum = Apparatus.from_string(apparatus)
+        operation_url = apparatus_enum.ssh_url()
 
     Path(path).mkdir(parents=True, exist_ok=True)
     
