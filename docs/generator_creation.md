@@ -99,7 +99,7 @@ import sys
 import conffwk
 import confmodel
 
-import daqconf.enable as enable
+import daqconf.include as include
 
 def generate( path:str ) -> bool :
 
@@ -108,8 +108,8 @@ def generate( path:str ) -> bool :
 
     session=base.get_session_name()
 
-    # enable all the det streams for the daphne
-    enable.enable(entry, False, ["np02-pds107-s00-sid50"], session)
+    # include all the det streams for the daphne
+    include.include(entry, False, ["np02-pds107-s00-sid50"], session)
 
     db = base.get_database(path)
 
