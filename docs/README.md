@@ -9,10 +9,12 @@ Shifters will use these interfaces indirectly via the shifter interface.
 
 ## High level view
 According to our configuration model, the different configurations to be used for operations are stored in different branches of operation repositories. 
-There is one operation repository for each apparatus: `np02`, `np04`. To be decided if coldboxes will have their own separate repositories. 
-The current repositores are https://gitlab.cern.ch/dune-daq/online/np02-configs-operation and https://gitlab.cern.ch/dune-daq/online/np04-configs-operations but NO ONE should interface directly with those repositories. 
-Changes should only be performed using the interfaces of this package. 
-The branches in the operation repoitories are derived using configuration generation functions (known as generators), starting from a base repository. 
+No one is expected to interface directly with those repositories: all operations are expected to be done via the interfaces defined in `runconftools`.
+There is one operation repository for each apparatus.  
+The definition of which apparati are avaialable depends on the base repository. 
+In the interfaces defined in `runconftools` we simpply provide default values for apparati and their URLs. By no means, this should stop the development of other repos.
+
+The branches in the operation repositories are derived using configuration generation functions (known as generators), starting from a base repository. 
 The base repository contains both OKS objects and generators used to create operation configurations. 
 
 ## Configuration branches
