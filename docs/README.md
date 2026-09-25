@@ -11,8 +11,8 @@ Shifters will use these interfaces indirectly via the shifter interface.
 According to our configuration model, the different configurations to be used for operations are stored in different branches of operation repositories. 
 No one is expected to interface directly with those repositories: all operations are expected to be done via the interfaces defined in `runconftools`.
 There is one operation repository for each apparatus.  
-The definition of which apparati are avaialable depends on the base repository. 
-In the interfaces defined in `runconftools` we simpply provide default values for apparati and their URLs. By no means, this should stop the development of other repos.
+The definition of which apparati are available depends on the base repository. 
+In the interfaces defined in `runconftools` we simply provide default values for apparati and their URLs. By no means should this stop the development of other repos.
 
 The branches in the operation repositories are derived using configuration generation functions (known as generators), starting from a base repository. 
 The base repository contains both OKS objects and generators used to create operation configurations. 
