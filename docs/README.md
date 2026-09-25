@@ -77,7 +77,7 @@ Usage: cpm-setup [OPTIONS] PATH
   inspection.
 
 Options:
-  -a, --apparatus [np02|np04]  Selection of the apparatus  [default: np02]
+  -a, --apparatus TEXT         Selection of the apparatus  [default: np02]
   --base_url TEXT              [default: https://gitlab.cern.ch/dune-
                                daq/online/ehn1-daqconfigs.git]
   --operation_url TEXT
@@ -111,7 +111,7 @@ Usage: cpm-update [OPTIONS] PATH
   branches are not pushed, use -p  or --push-only to perform the push
 
 Options:
-  -a, --apparatus [np02|np04]  Selection of the apparatus  [default: np02]
+  -a, --apparatus TEXT         Selection of the apparatus  [default: np02]
   --base_url TEXT              Git location of the remote base repo  [default:
                                ssh://git@gitlab.cern.ch:7999/dune-
                                daq/online/ehn1-daqconfigs.git]
@@ -167,7 +167,7 @@ Usage: cpm-purge [OPTIONS] PATH
   a given release
 
 Options:
-  -a, --apparatus [np02|np04]  Selection of the apparatus  [default: np02]
+  -a, --apparatus TEXT         Selection of the apparatus  [default: np02]
   --base_url TEXT              Git location of the remote base repo  [default:
                                ssh://git@gitlab.cern.ch:7999/dune-
                                daq/online/ehn1-daqconfigs.git]
