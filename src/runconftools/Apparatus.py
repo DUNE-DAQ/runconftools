@@ -5,6 +5,7 @@ class Apparatus(Enum):
     NP04 = "np04"
     NP02_EMU = "np02_emu"
     NP04_EMU = "np04_emu"
+    VD_COLDBOX = "vd_coldbox"
 
     def __str__(self):
         return self.value
@@ -26,6 +27,7 @@ class Apparatus(Enum):
             case Apparatus.NP04 : return "https://gitlab.cern.ch/dune-daq/online/np04-configs-operation.git"
             case Apparatus.NP02_EMU : return "https://gitlab.cern.ch/dune-daq/online/np02-emu-configs.git"
             case Apparatus.NP04_EMU : return "https://gitlab.cern.ch/dune-daq/online/np04-emu-configs.git"
+            case Apparatus.VD_COLDBOX : return "https://gitlab.cern.ch/dune-daq/online/vd-coldbox-configs-operation.git"
 
         raise ValueError(f"{self.value} is missing the https URL")
 
@@ -35,6 +37,7 @@ class Apparatus(Enum):
             case Apparatus.NP04 : return "ssh://git@gitlab.cern.ch:7999/dune-daq/online/np04-configs-operation.git" 
             case Apparatus.NP02_EMU : return "ssh://git@gitlab.cern.ch:7999/dune-daq/online/np02-emu-configs.git"
             case Apparatus.NP04_EMU : return "ssh://git@gitlab.cern.ch:7999/dune-daq/online/np04-emu-configs.git"
+            case Apparatus.VD_COLDBOX : return "ssh://git@gitlab.cern.ch:7999/dune-daq/online/vd-coldbox-configs-operation.git"
 
         raise ValueError(f"{self.value} is missing the ssh URL")
 
