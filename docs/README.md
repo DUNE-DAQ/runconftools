@@ -76,6 +76,22 @@ The base and release in use are always printed.
 
 As the configuration branches are named `<release>/<configuration_key>`, a release cannot contain `/`, cannot start with `-` and must be valid in a git branch name. 
 
+### Output and exit codes
+All the scripts report what they do in the same way:
+ - a header with the parameters of the run (path, apparati, base, release, ...) and the list of the steps;
+ - each step starts with a line `Step <i>/<n> · <name>`, so it is always clear where the script is;
+ - during the generation, every configuration is printed with its result, counter and percentage, e.g. `✔ [ 7/48  15%] np02 · monitoring` or `✘ [ 8/48  17%] np04 · femb_pulser — verifier readout_verification failed`, and on a terminal a live progress bar is shown;
+ - a summary at the end, also when the script stops because of an error: a table with the result of each apparatus, 
+   the failed configurations with the reason, all the errors and warnings with the step (and apparatus) where they happened, 
+   and a final verdict, `SUCCESS`, `COMPLETED WITH ERRORS` or `FAILED`. 
+   A failure says at which step the script stopped, what was not done (e.g. `Nothing was pushed to any operation repository.`) and what to do next.
+
+On a terminal the output is coloured. When it is redirected, e.g. to a file, it is plain text and every log line has a timestamp, so it can be searched with the usual tools. 
+The colours can also be disabled with the `NO_COLOR` environment variable. 
+The details of the git operations and of the generators are printed with `--debug`.
+
+The exit code is `0` on success, `1` when the script stops because of a failure, `2` for wrong options and `130` when interrupted.
+
 ### Checks before starting
 Before anything is cloned or changed, all the scripts check that:
  - the base and the operation repositories can be reached (which also checks your credentials) and that each operation repository has a default branch;
@@ -306,6 +322,7 @@ urls = ConfPool.set_apparatuses(apparati, {"np02": "ssh://..."}, ssh=True)
 ```
 Methods that need an operation repository raise a `RuntimeError` on a base-only pool. 
 `push_configurations` only pushes branches that come from a successful generation, see `is_verified` and `get_unverified_configurations`. 
+The progress of `propagate_base` can be followed with its `listener` argument (see `GenerationListener`), and after a failed `generate_conf` the reason is in `last_failure`. 
 The generators, verifiers and common functions are always imported from the working tree of the pool calling them, so several pools and bases can be used in the same process.
 
 ## Development

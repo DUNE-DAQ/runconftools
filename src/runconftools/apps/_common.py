@@ -15,11 +15,27 @@ import click
 import git
 
 from runconftools.ConfPool import ConfPool, repository_key
+from runconftools.report import ItemProgress, Report, Stop
 
 ALL_APPARATUSES = "all"
 BASE_POOL_DIR = "_base"
 
 _NAME_REGEX = re.compile(r"^[A-Za-z0-9_]+$")
+
+
+def git_error(stderr: str, default: str = "unknown error") -> str:
+    """
+    Return the most useful line of the error output of git, i.e. the first ``fatal:`` or ``error:`` line.
+
+    Args:
+        stderr: error output of a git command.
+        default: returned if the output is empty.
+    """
+    lines = [line.strip() for line in stderr.splitlines() if line.strip()]
+    for line in lines:
+        if line.startswith(("fatal:", "error:")):
+            return line
+    return lines[-1] if lines else default
 
 
 def split_values(values: Iterable[str]) -> list[str]:
@@ -157,7 +173,7 @@ def check_repositories(base_url: str | None = None, operation_urls: dict[str, st
         operation_urls: mapping from apparatus to operation URL.
 
     Raises:
-        click.ClickException: listing all the repositories that cannot be used.
+        Stop: listing all the repositories that cannot be used.
     """
     operation_urls = operation_urls or {}
     to_check = ([("base", base_url)] if base_url else []) + [(f"{a} operation", u) for a, u in operation_urls.items()]
@@ -166,13 +182,13 @@ def check_repositories(base_url: str | None = None, operation_urls: dict[str, st
         logging.debug("Checking the %s repository %s", label, url)
         status, out, err = git.cmd.Git().ls_remote("--symref", url, "HEAD", with_extended_output=True, with_exceptions=False)
         if status != 0:
-            reason = err.strip().splitlines()[-1] if err.strip() else f"exit code {status}"
-            problems.append(f"the {label} repository {url} cannot be reached: {reason}")
+            problems.append(f"the {label} repository {url} cannot be reached: {git_error(err, f'exit code {status}')}")
         elif label != "base" and not any(line.startswith("ref:") for line in out.splitlines()):
             problems.append(f"the {label} repository {url} has no default branch")
 
     if problems:
-        raise click.ClickException("\n".join(["Cannot use the repositories:", *problems]))
+        raise Stop("\n".join(["Cannot use the repositories:", *problems]),
+                   hint="Check the URLs and your access: ssh key for ssh URLs, netrc token for https URLs (see the README)")
 
 
 def base_pool(path: str, base_url: str) -> ConfPool:
@@ -225,7 +241,7 @@ def select_apparatuses(
             apparatuses = ConfPool.default_apparatuses()
         if not apparatuses:
             raise click.UsageError(f"No apparatus found in base {base}")
-        logging.info("Selected apparatuses: %s", ", ".join(apparatuses))
+        logging.debug("Selected apparatuses: %s", ", ".join(apparatuses))
 
     ## a plain URL is only unambiguous if the user explicitly asked for a single apparatus
     urls = parse_operation_urls(operation_values, apparatuses if explicit else None)
@@ -238,9 +254,8 @@ def select_apparatuses(
         if repository_key(url) == repository_key(base_url):
             raise click.UsageError(f"The base repository {base_url} cannot be the operation repository of {apparatus}")
 
-    logging.info("Operation repositories:")
     for apparatus, url in operation_urls.items():
-        logging.info("  %s -> %s", apparatus, url)
+        logging.debug("Operation repository of %s: %s", apparatus, url)
     return operation_urls
 
 
@@ -257,8 +272,8 @@ def open_pools(path: str, operation_urls: dict[str, str], base_url: str) -> dict
         Mapping from apparatus to its pool, in the same order as ``operation_urls``.
 
     Raises:
-        click.ClickException: if a local repository has uncommitted changes, e.g. left by a generator
-            that crashed, which could end up in the configurations.
+        Stop: if a local repository has uncommitted changes, e.g. left by a generator that crashed,
+            which could end up in the configurations.
     """
     root = Path(path)
     root.mkdir(parents=True, exist_ok=True)
@@ -276,10 +291,8 @@ def open_pools(path: str, operation_urls: dict[str, str], base_url: str) -> dict
         except (git.InvalidGitRepositoryError, git.NoSuchPathError):
             pass
     if dirty:
-        raise click.ClickException(
-            "These local repos have uncommitted changes: " + ", ".join(dirty) + "\n"
-            "Inspect them with 'git status', then commit or discard the changes, or use a new PATH"
-        )
+        raise Stop("These local repos have uncommitted changes: " + ", ".join(dirty),
+                   hint="Inspect them with 'git status', then commit or discard the changes, or use a new PATH")
 
     pools = {}
     for apparatus, url in operation_urls.items():
@@ -310,8 +323,29 @@ def check_apparatuses(pools: dict[str, ConfPool], base: str) -> None:
             )
 
 
-def log_apparatus(apparatus: str) -> None:
-    """Log a header announcing the apparatus being processed."""
-    logging.info("=============================================")
-    logging.info(f"Apparatus {apparatus}")
-    logging.info("=============================================")
+class GenerationReporter:
+    """Reports the generators run by ``ConfPool.propagate_base`` for one apparatus, see ``GenerationListener``."""
+
+    def __init__(self, report: Report, progress: ItemProgress, apparatus: str) -> None:
+        """
+        Args:
+            report: report of the run, where the failures are recorded.
+            progress: progress of all the generators of the run.
+            apparatus: apparatus whose generators are run.
+        """
+        self.report = report
+        self.progress = progress
+        self.apparatus = apparatus
+        self.succeeded: list[str] = []
+        self.failed: list[str] = []
+
+    def started(self, generator: str) -> None:
+        self.progress.start(f"{self.apparatus} · {generator}")
+
+    def finished(self, generator: str, success: bool, reason: str | None) -> None:
+        self.progress.finish(f"{self.apparatus} · {generator}", success, reason)
+        if success:
+            self.succeeded.append(generator)
+        else:
+            self.failed.append(generator)
+            self.report.add_failure(self.apparatus, generator, reason or "failed")

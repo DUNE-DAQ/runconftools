@@ -6,6 +6,7 @@ import sys
 from collections.abc import Iterable, Mapping
 from time import perf_counter
 from types import ModuleType
+from typing import Protocol
 
 import git
 
@@ -34,6 +35,16 @@ def repository_key(url: str) -> str:
     if match:
         return match.group(1).lower() + "/" + match.group(2).lstrip("/")
     return os.path.abspath(u)
+
+
+class GenerationListener(Protocol):
+    """Receives the progress of ``ConfPool.propagate_base``, e.g. to display it."""
+
+    def started(self, generator: str) -> None:
+        """Called before running ``generator``."""
+
+    def finished(self, generator: str, success: bool, reason: str | None) -> None:
+        """Called after running ``generator``, with the reason of the failure if it failed."""
 
 
 class FetchTimedRemote(git.Remote):
@@ -106,13 +117,15 @@ class ConfPool:
         self.conf_regex = re.compile(r"^operation/([^/]+)/(.*)$")
         self.base_regex = re.compile(r"^base/(.*)$")
         self.apparatus = apparatus
+        ## why the last generate_conf failed, None if it succeeded
+        self.last_failure: str | None = None
 
         try:
             self.repo = FetchTimedRepo(path)
         except git.InvalidGitRepositoryError:
             if not base_url:
                 raise ValueError(f"{path} is not a git repository and no base URL is given to clone it") from None
-            logging.warning("The repo in %s is empty, cloning from remotes", path)
+            logging.info("The repo in %s is empty, cloning from remotes", path)
             self.repo = FetchTimedRepo.clone_from(url=base_url, to_path=path)
 
         if not self._set_remote("base", base_url):
@@ -124,11 +137,11 @@ class ConfPool:
         if self._set_remote("operation", operation_url):
             self.operation = self.repo.remote("operation", fetch_timeout=fetch_timeout)
         else:
-            logging.info("No operation repository is defined, only the base can be used")
+            logging.debug("No operation repository is defined, only the base can be used")
 
-        logging.info("Repo in %s set with the following remotes:", path)
+        logging.debug("Repo in %s set with the following remotes:", path)
         for r in self.repo.remotes:
-            logging.info("%s -> %s", r.name, r.url)
+            logging.debug("%s -> %s", r.name, r.url)
         sys.path.append(path + "/functions")
 
         ## in some places it is useful to know the default branch of the operation repository
@@ -190,7 +203,7 @@ class ConfPool:
         if default_branch is None:
             raise RuntimeError(f"Cannot determine the default branch of {operation.url}")
 
-        logging.info(f"Branch {default_branch} will be ignored in operation")
+        logging.debug(f"Branch {default_branch} will be ignored in operation")
         self.default_regex = re.compile(rf"^(?:[^/]+/)?{default_branch}$")  ## we only check that it ends with this name
 
     def _require_operation(self) -> FetchTimedRemote:
@@ -602,6 +615,7 @@ class ConfPool:
 
         ## until this generation succeeds, the branch must not be pushed
         self._set_verified(ref_name, False)
+        self.last_failure = None
 
         ## leftovers in the working tree would end up in this configuration
         if self.repo.is_dirty(untracked_files=True):
@@ -609,7 +623,7 @@ class ConfPool:
 
         # prepare the branch
         if generator not in confs:
-            logging.info(f"New configuration {generator} created from base {base}")
+            logging.debug(f"New configuration {generator} created from base {base}")
             self.checkout_base(base)
             branches = [b.name for b in self.repo.branches]
             logging.debug(",".join(branches))
@@ -617,15 +631,13 @@ class ConfPool:
                 self.repo.delete_head(ref_name, force=True)
             self.repo.create_head(ref_name).checkout()
         else:
-            logging.warning(
-                f"Configuration {generator} overrides existing operation branch"
-            )
+            logging.debug(f"Configuration {generator} overrides the existing operation branch")
             self.checkout_conf(generator, release=release_tag)
             # whipe out the branch
             files = self.repo.index.remove(["."], r=True, working_tree=True)
             logging.debug("Removing " + ", ".join(files))
             self.repo.git.checkout(f"base/{base}", ".")
-            logging.info(f"Restore from base {base}")
+            logging.debug(f"Restore from base {base}")
 
 
         ## prepare the message for commit
@@ -635,7 +647,8 @@ class ConfPool:
 
         try:
             res = self._run_generator(apparatus, generator, message)
-        except Exception:
+        except Exception as e:
+            self.last_failure = f"{type(e).__name__}: {e}"
             ## keep the partial result for debugging and leave a clean working tree for the next generation
             try:
                 self.commit(f"{message} [failed with an exception]")
@@ -680,20 +693,21 @@ class ConfPool:
         ## we commmit even if the result is false because having the local result
         ## might be useful for debugging
         if not res:
+            self.last_failure = "generate() returned False"
             self.commit(message)
             return res
 
         self.remove_unused_sessions()
 
         ## verfication which might produce files
-        logging.info("---- Verification ----")
+        logging.debug("Running the verifiers")
         very = self.verify()
 
         self.commit(message)
 
         ## stop the process if veryfication failed
         if not very :
-            logging.error(f"Verfication failed for {generator}")
+            logging.error(f"Verification failed for {generator}: {self.last_failure}")
             return None
 
         ## validate
@@ -701,6 +715,7 @@ class ConfPool:
             valctor = getattr(module, "validate")
             res = valctor(self.repo.working_dir)
             if not res :
+                self.last_failure = "validate() returned False"
                 logging.error(f"Validation failed for {generator}")
                 return res
         else:
@@ -711,8 +726,22 @@ class ConfPool:
     def propagate_base(
         self, base: str, release_tag:str|None=None,
             conf_regex: re.Pattern = re.compile(r".*"),
-            no_push:bool = False
+            no_push:bool = False,
+            listener: GenerationListener | None = None,
     ) -> bool :    ## we return True if it's ok to proceed with a push because all went well
+        """
+        Generate the configurations of the generators of the base selected by ``conf_regex``.
+
+        Args:
+            base: base branch to start from.
+            release_tag: release prefix of the branches, defaults to ``base``.
+            conf_regex: regex selecting the generators, matched from the start of the name.
+            no_push: if True the branches are only created locally.
+            listener: optional object notified before and after each generator.
+
+        Returns:
+            True if all the generations succeeded, a falsy value otherwise.
+        """
         self._require_operation()
         if not release_tag:
             release_tag = base
@@ -728,10 +757,10 @@ class ConfPool:
         ret = True
         for g in generators:
             if conf_regex.match(g):
-                logging.info("\n")
-                logging.info("---------------------------------------------")
-                logging.info(f"Generating {g}")
-                logging.info("---------------------------------------------")
+                logging.debug(f"Generating {g}")
+                if listener:
+                    listener.started(g)
+                self.last_failure = None
                 try :
                     result = self.generate_conf( base=base, generator=g, release_tag=release_tag,
                                                  log_message=message, no_push=no_push
@@ -740,7 +769,12 @@ class ConfPool:
                         ret = False
                 except Exception as e:
                     logging.error(f"Exception raised when trying to generate {g}: {e}")
+                    logging.debug("Traceback", exc_info=True)
+                    self.last_failure = self.last_failure or f"{type(e).__name__}: {e}"
+                    result = False
                     ret = False
+                if listener:
+                    listener.finished(g, bool(result), None if result else (self.last_failure or "failed"))
 
         return ret
 
@@ -812,8 +846,21 @@ class ConfPool:
         status, out, err = self.repo.git.push("--dry-run", "--porcelain", "operation", *branches,
                                               with_extended_output=True, with_exceptions=False)
         if status != 0:
-            rejected = [line.split("\t", 1)[1] for line in out.splitlines() if line.startswith("!")]
-            problems = [f"push rejected: {r}" for r in rejected] or [f"push failed: {err.strip().splitlines()[-1] if err.strip() else status}"]
+            ## porcelain lines of the rejected refs: "!<TAB>refs/heads/<branch>:refs/heads/<branch><TAB>[rejected] (<why>)"
+            for line in out.splitlines():
+                if not line.startswith("!"):
+                    continue
+                fields = line.split("\t")
+                branch = fields[1].split(":")[0].removeprefix("refs/heads/") if len(fields) > 1 else line
+                summary = fields[2].strip() if len(fields) > 2 else "rejected"
+                if "fetch first" in summary or "non-fast-forward" in summary:
+                    problems.append(f"{branch} was changed on the operation repository after it was generated {summary}")
+                else:
+                    problems.append(f"{branch} is refused by the operation repository {summary}")
+            if not problems:
+                lines = [line.strip() for line in err.splitlines() if line.strip()]
+                reason = next((line for line in lines if line.startswith(("fatal:", "error:"))), lines[-1] if lines else status)
+                problems.append(f"the push would fail: {reason}")
         return problems
 
     def push_configurations(self,
@@ -904,6 +951,7 @@ class ConfPool:
         verifiers = self.get_verifiers()
         ## every base has verifiers, finding none means that something is wrong
         if not verifiers :
+            self.last_failure = "the base has no verifiers"
             logging.error("No verifiers are available, the configuration cannot be verified")
             return False
         for v in verifiers:
@@ -912,10 +960,11 @@ class ConfPool:
             functor = getattr(module, "verify")
             res = functor(self.repo.working_dir)
             if not res :
-                logging.error(f"{v} failed")
+                self.last_failure = f"verifier {v} failed"
+                logging.error(f"Verifier {v} failed")
                 return False
 
-        logging.info("Verification successful!")
+        logging.debug("Verification successful")
         return True
 
 
@@ -933,7 +982,7 @@ class ConfPool:
         """
         ## new files are added too, in case they are useful for backup
         for f in self.repo.untracked_files:
-            logging.info(f"Adding new file: {f}")
+            logging.debug(f"Adding new file: {f}")
         self.repo.git.add(A=True)
 
         ## compare the index with HEAD, so that changes staged before the call are not missed

@@ -1,9 +1,7 @@
 #!/usr/bin/env python3
 
 # @file cpm-setup is the executable used to interact with the ConfigPool class and setup a working environment
-import logging
 import re
-import sys
 
 import click
 
@@ -11,13 +9,13 @@ from runconftools.apps._common import (
     apparatus_option,
     check_apparatuses,
     check_repositories,
-    log_apparatus,
     open_pools,
     operation_url_option,
     select_apparatuses,
     validate_release,
 )
 from runconftools.ConfPool import ConfPool
+from runconftools.report import Report, Stop
 
 
 @click.command(context_settings={'show_default': True})
@@ -48,49 +46,72 @@ def main(path, apparatus, base_url, operation_url, release, base, conf, debug):
     If the conf option is specified, the chosen configuration from operation is checked out for inspection.
     """
 
-    logging.basicConfig( format="%(asctime)s %(levelname)-8s %(message)s",
-                         level=logging.DEBUG if debug else logging.INFO,
-                         datefmt="%Y-%m-%d %H:%M:%S",
-    )
-
     if not base :
         base = release
 
-    logging.info(f"Base: {base}, release: {release}")
+    steps = ["Checking options and repositories", "Preparing local repositories", "Inspecting configurations"]
+    if conf:
+        steps.append("Checking out the configuration")
+    context = {
+        "Path": path,
+        "Apparatuses": "all" if apparatus is None else ", ".join(apparatus),
+        "Base": base,
+        "Release": release,
+    }
+    if conf:
+        context["Configuration"] = conf
 
-    check_repositories(base_url=base_url)
-    operation_urls = select_apparatuses(path, base_url, base, apparatus, operation_url, ssh=False)
-    check_repositories(operation_urls=operation_urls)
-    pools = open_pools(path, operation_urls, base_url)
-    check_apparatuses(pools, base)
+    with Report("cpm-setup", steps, context=context, debug=debug) as report:
+        report.columns = ["Generators", "Configurations", "Checked out"]
+        report.step("Checking options and repositories")
+        check_repositories(base_url=base_url)
+        report.ok(f"Base repository reachable: {base_url}")
+        operation_urls = select_apparatuses(path, base_url, base, apparatus, operation_url, ssh=False)
+        check_repositories(operation_urls=operation_urls)
+        report.table("Operation repositories", ["Apparatus", "Repository"], [[a, u] for a, u in operation_urls.items()])
+        report.ok(f"{len(operation_urls)} operation repositories reachable")
 
-    missing = []
-    for name, pool in pools.items():
-        log_apparatus(name)
+        report.step("Preparing local repositories")
+        pools = open_pools(path, operation_urls, base_url)
+        check_apparatuses(pools, base)
+        for name, pool in pools.items():
+            report.ok(f"{name}: local repo {pool.repo.working_dir}")
 
-        bases = pool.get_base_branches()
-        logging.info("Available bases: {}".format(", ".join(bases)))
+        report.step("Inspecting configurations")
+        bases = []
+        for name, pool in pools.items():
+            report.current_apparatus = name
+            bases = pool.get_base_branches()
+            versions = pool.get_daq_versions()
+            gens = pool.get_generators(base=base)
+            confs = pool.get_confs(release=re.compile(release))
+            verifiers = pool.get_verifiers(base=base)
+            report.table(name, ["", "Available"], [
+                ["Releases in operation", ", ".join(sorted(versions))],
+                [f"Generators in {base}", ", ".join(sorted(gens))],
+                [f"Configurations of {release}", ", ".join(sorted(confs))],
+                ["Verifiers", ", ".join(sorted(verifiers))],
+            ])
+            report.set_result(name, "Generators", str(len(gens)))
+            report.set_result(name, "Configurations", str(len(confs)))
+        report.current_apparatus = None
+        report.info(f"Base branches: {', '.join(sorted(bases))}")
 
-        versions = pool.get_daq_versions()
-        logging.info(
-            "Configurations are available for the following releases: {}".format(
-                ", ".join(versions)
-            )
-        )
+        if conf:
+            report.step("Checking out the configuration")
+            missing = []
+            for name, pool in pools.items():
+                report.current_apparatus = name
+                if pool.checkout_conf(release=release, conf=conf) is None:
+                    missing.append(name)
+                    report.error(f"{name}: configuration {conf} of {release} not found")
+                    report.set_result(name, "Checked out", "✘ not found")
+                else:
+                    report.ok(f"{name}: {release}/{conf} checked out in {pool.repo.working_dir}")
+                    report.set_result(name, "Checked out", "✔")
+            report.current_apparatus = None
+            if len(missing) == len(pools):
+                raise Stop(f"Configuration {conf} of {release} not found for any apparatus",
+                           hint="Check the name in 'Configurations' above")
 
-        gens = pool.get_generators(base=base)
-        logging.info("Available Generators: {}".format(", ".join(gens)))
-
-        confs = pool.get_confs(release=re.compile(release))
-        logging.info("Available Configurations: {}".format(", ".join(confs)))
-
-        verifiers = pool.get_verifiers(base=base)
-        logging.info("Available verifiers: {}".format(", ".join(verifiers)))
-
-        if conf and pool.checkout_conf(release=release, conf=conf) is None:
-            missing.append(name)
-
-    if missing:
-        logging.error(f"Configuration {conf} of {release} not found for: {', '.join(missing)}")
-        if len(missing) == len(pools):
-            sys.exit(1)
+        report.success_message = f"Local repos ready in {path} for {', '.join(pools)}"

@@ -1,20 +1,18 @@
 #!/usr/bin/env python3
 
-import logging
 import re
-import sys
 
 import click
 
 from runconftools.apps._common import (
     apparatus_option,
     check_repositories,
-    log_apparatus,
     open_pools,
     operation_url_option,
     select_apparatuses,
     validate_release,
 )
+from runconftools.report import Report, Stop
 
 
 @click.command(context_settings={'show_default': True})
@@ -45,28 +43,44 @@ def main(path, apparatus, base_url, operation_url, release, conf, debug):
     Removes from the operation repos the selected configurations for a given release
     """
 
-    logging.basicConfig(
-        format="%(asctime)s %(levelname)-8s %(message)s",
-        level=logging.DEBUG if debug else logging.INFO,
-        datefmt="%Y-%m-%d %H:%M:%S",
-    )
+    steps = ["Checking options and repositories", "Preparing local repositories", "Removing configurations"]
+    context = {
+        "Path": path,
+        "Apparatuses": "all (defaults)" if apparatus is None else ", ".join(apparatus),
+        "Release": release,
+        "Configurations": conf,
+    }
 
-    check_repositories(base_url=base_url)
-    ## there is no base here, so 'all' stands for the default apparatuses
-    operation_urls = select_apparatuses(path, base_url, None, apparatus, operation_url, ssh=True)
-    check_repositories(operation_urls=operation_urls)
-    pools = open_pools(path, operation_urls, base_url)
+    with Report("cpm-purge", steps, context=context, debug=debug) as report:
+        report.step("Checking options and repositories")
+        check_repositories(base_url=base_url)
+        report.ok(f"Base repository reachable: {base_url}")
+        ## there is no base here, so 'all' stands for the default apparatuses
+        operation_urls = select_apparatuses(path, base_url, None, apparatus, operation_url, ssh=True)
+        check_repositories(operation_urls=operation_urls)
+        report.table("Operation repositories", ["Apparatus", "Repository"], [[a, u] for a, u in operation_urls.items()])
+        report.ok(f"{len(operation_urls)} operation repositories reachable")
 
-    removed_any = False
-    for name, pool in pools.items():
-        log_apparatus(name)
-        removed = pool.remove_configurations(release=release, conf_regex=re.compile(conf))
-        if removed:
-            removed_any = True
-            logging.info("Removed branches from %s: %s", name, ", ".join(removed))
-        else:
-            logging.warning("Nothing removed from %s", name)
+        report.step("Preparing local repositories")
+        pools = open_pools(path, operation_urls, base_url)
+        for name, pool in pools.items():
+            report.ok(f"{name}: local repo {pool.repo.working_dir}")
 
-    if not removed_any:
-        logging.error(f"No configuration of {release} matching '{conf}' was found, nothing is removed")
-        sys.exit(1)
+        report.step("Removing configurations")
+        removed_total = 0
+        for name, pool in pools.items():
+            report.current_apparatus = name
+            removed = pool.remove_configurations(release=release, conf_regex=re.compile(conf))
+            removed_total += len(removed)
+            if removed:
+                report.ok(f"{name}: removed {', '.join(removed)}")
+                report.set_result(name, "Removed", f"✔ {len(removed)}")
+            else:
+                report.warn(f"Nothing removed from {name}")
+                report.set_result(name, "Removed", "⚠ 0")
+        report.current_apparatus = None
+
+        if not removed_total:
+            raise Stop(f"No configuration of {release} matching '{conf}' was found, nothing is removed",
+                       hint="Check the release (-r) and the --conf regex, e.g. with cpm-setup")
+        report.success_message = f"{removed_total} configurations of {release} removed"

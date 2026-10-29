@@ -496,13 +496,14 @@ def test_is_stable_release():
     assert not ConfPool.is_stable_release("mroda-test")
 
 
-def test_release_mismatch_warns(tmp_path, remotes, monkeypatch, caplog):
+def test_release_mismatch_warns(tmp_path, remotes, monkeypatch):
     monkeypatch.setenv("SPACK_RELEASE", "fddaq-v5.6.0-a9-1")
     push_base_branch(remotes["base"], tmp_path / "remotes" / "base_stable", "fddaq-v5.7.2", {"np02": {"gen_a": True}})
     args = [str(tmp_path / "area"), "-a", "np02", "--base_url", str(remotes["base"]), *op_args(remotes, "np02"),
             "-b", "fddaq-v5.7.2", "-r", "fddaq-v5.7.2"]
-    assert run(cpm_update.main, args).exit_code == 0
-    assert "might not be compatible" in caplog.text
+    result = run(cpm_update.main, args)
+    assert result.exit_code == 0
+    assert "might not be compatible" in result.output
 
 
 @pytest.mark.parametrize("release", ["a/b", "-x", "bad name", "a..b", "x.lock"])
@@ -513,3 +514,50 @@ def test_invalid_release_names(tmp_path, remotes, release):
         result = CliRunner().invoke(main, args if main is not cpm_purge.main else [a for a in args if a not in ("-b", "v1")])
         assert result.exit_code == 2, (main, release)
         assert "Invalid value for '-r'" in result.output
+
+
+# ---------------------------------------------------------------- reporting
+
+
+def test_report_on_failure(tmp_path, remotes):
+    result = run(cpm_update.main, update_args(tmp_path, remotes, "broken", "-p"))
+    assert result.exit_code == 1
+    out = result.output
+    assert "Step 1/6 · Checking options and repositories" in out
+    assert "Step 3/6 · Generating configurations" in out
+    assert "Step 4/6" not in out
+    assert "100%] np04 · gen_b — generate() returned False" in out
+    assert "Failed configurations" in out and "np04/gen_b — generate() returned False" in out
+    assert "✘ FAILED" in out and "Stopped during step 3/6 Generating configurations" in out
+    assert "Nothing was pushed to any operation repository." in out
+    assert "Generators without validation (" in out
+
+
+def test_report_on_success(tmp_path, remotes):
+    result = run(cpm_update.main, update_args(tmp_path, remotes, "v1"))
+    assert result.exit_code == 0
+    out = result.output
+    assert "Step 3/3 · Generating configurations" in out
+    assert "[4/4 100%]" in out
+    assert "✔ SUCCESS" in out and "4 configurations generated for np02, np04" in out
+    assert "Nothing was pushed: run again with --push-only to push them." in out
+
+
+def test_report_on_unexpected_exception(tmp_path, remotes, monkeypatch):
+    def broken_clean(self, base, release_tag=None):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(ConfPool, "clean", broken_clean)
+    result = CliRunner().invoke(cpm_update.main, update_args(tmp_path, remotes, "v1", "-p"))
+    assert result.exit_code == 1
+    assert "Unexpected OSError: disk full" in result.output
+    assert "Stopped during step 6/6 Removing obsolete configurations" in result.output
+
+
+def test_report_hint_on_unreachable_repository(tmp_path, remotes):
+    args = [str(tmp_path / "area"), "-a", "np02", "--base_url", str(remotes["base"]),
+            "--operation_url", f"np02={tmp_path / 'missing.git'}", "-b", "v1", "-r", "rel"]
+    result = CliRunner().invoke(cpm_update.main, args)
+    assert result.exit_code == 1
+    assert "fatal:" in result.output
+    assert "→ Check the URLs and your access" in result.output

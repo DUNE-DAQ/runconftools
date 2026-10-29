@@ -1,25 +1,24 @@
 #!/usr/bin/env python3
 
 # @file cpm-update is the executable used to interact with the ConfigPool class and propagate changes from a base branch to the relevant operation branches
-import logging
 import os
 import re
-import sys
 
 import click
 from click.core import ParameterSource
 
 from runconftools.apps._common import (
+    GenerationReporter,
     apparatus_option,
     check_apparatuses,
     check_repositories,
-    log_apparatus,
     open_pools,
     operation_url_option,
     select_apparatuses,
     validate_release,
 )
 from runconftools.ConfPool import ConfPool
+from runconftools.report import Report, Stop
 
 
 @click.command(context_settings={'show_default': True})
@@ -60,76 +59,163 @@ def main(ctx, path, apparatus, base_url, operation_url, base, release, conf, pus
     When several apparatuses are selected, nothing is pushed unless the generation succeeded for all of them.
     """
 
-    logging.basicConfig(
-        format="%(asctime)s %(levelname)-8s %(message)s",
-        level=logging.DEBUG if debug else logging.INFO,
-        datefmt="%Y-%m-%d %H:%M:%S",
-    )
+    pushing = push or push_only
+    steps = ["Checking options and repositories", "Preparing local repositories"]
+    if not push_only:
+        steps.append("Generating configurations")
+    if pushing:
+        steps += ["Checking the push", "Pushing configurations", "Removing obsolete configurations"]
+    mode = "push only" if push_only else ("generate and push" if push else "generate locally, no push")
+    context = {
+        "Path": path,
+        "Apparatuses": "all" if apparatus is None else ", ".join(apparatus),
+        "Base": base,
+        "Release": release,
+        "Generators": conf,
+        "Mode": mode,
+        "Environment": os.environ.get("SPACK_RELEASE") or "SPACK_RELEASE not set",
+    }
 
-    ## outside of a DAQ environment the defaults fall back to develop, which must not be pushed by accident
-    if (push or push_only) and not os.environ.get("SPACK_RELEASE"):
-        implicit = [f"--{p}" for p in ("base", "release") if ctx.get_parameter_source(p) == ParameterSource.DEFAULT]
-        if implicit:
-            raise click.UsageError(f"SPACK_RELEASE is not set: {' and '.join(implicit)} must be given explicitly when pushing")
-    logging.info(f"Base: {base}, release: {release}")
+    with Report("cpm-update", steps, context=context, debug=debug) as report:
+        report.columns = ["Selected", "Generated", "Pushed", "Removed", "Result"]
+        report.step("Checking options and repositories")
 
-    ## the generators use the software of the environment, which should match a stable release
-    environment = ConfPool.get_release(default="")
-    if not push_only and ConfPool.is_stable_release(release) and release != environment:
-        logging.warning(f"Generating configurations for {release} with the software of "
+        ## outside of a DAQ environment the defaults fall back to develop, which must not be pushed by accident
+        if pushing and not os.environ.get("SPACK_RELEASE"):
+            implicit = [f"--{p}" for p in ("base", "release") if ctx.get_parameter_source(p) == ParameterSource.DEFAULT]
+            if implicit:
+                raise click.UsageError(f"SPACK_RELEASE is not set: {' and '.join(implicit)} must be given explicitly when pushing")
+
+        ## the generators use the software of the environment, which should match a stable release
+        environment = ConfPool.get_release(default="")
+        if not push_only and ConfPool.is_stable_release(release) and release != environment:
+            report.warn(f"Generating configurations for {release} with the software of "
                         f"{os.environ.get('SPACK_RELEASE') or 'no DAQ release'}, they might not be compatible")
 
-    conf_regex = re.compile(conf)
+        conf_regex = re.compile(conf)
 
-    check_repositories(base_url=base_url)
-    operation_urls = select_apparatuses(path, base_url, base, apparatus, operation_url, ssh=True)
-    check_repositories(operation_urls=operation_urls)
-    pools = open_pools(path, operation_urls, base_url)
-    check_apparatuses(pools, base)
+        check_repositories(base_url=base_url)
+        report.ok(f"Base repository reachable: {base_url}")
+        operation_urls = select_apparatuses(path, base_url, base, apparatus, operation_url, ssh=True)
+        check_repositories(operation_urls=operation_urls)
+        report.table("Operation repositories", ["Apparatus", "Repository"], [[a, u] for a, u in operation_urls.items()])
+        report.ok(f"{len(operation_urls)} operation repositories reachable")
 
-    ## a regex matching nothing is most likely a mistake, and apparatuses it does not concern are left untouched
-    for name, pool in list(pools.items()):
-        if not any(conf_regex.match(g) for g in pool.get_generators(base)):
-            logging.warning("No %s generator matches '%s', %s is skipped", name, conf, name)
-            del pools[name]
-    if not pools:
-        raise click.UsageError(f"No generator of the selected apparatuses matches '{conf}'")
+        report.step("Preparing local repositories")
+        pools = open_pools(path, operation_urls, base_url)
+        check_apparatuses(pools, base)
 
-    failed = []
-    if not push_only :
-        for name, pool in pools.items():
-            log_apparatus(name)
-            if not pool.propagate_base(base=base, release_tag=release, conf_regex=conf_regex, no_push=True):
-                failed.append(name)
+        ## a regex matching nothing is most likely a mistake, and apparatuses it does not concern are left untouched
+        selected = {}
+        for name, pool in list(pools.items()):
+            generators = [g for g in pool.get_generators(base) if conf_regex.match(g)]
+            if generators:
+                selected[name] = generators
+                report.ok(f"{name}: {len(generators)} generators selected, local repo {pool.repo.working_dir}")
+                report.set_result(name, "Selected", str(len(generators)))
+            else:
+                report.warn(f"No {name} generator matches '{conf}', {name} is skipped")
+                report.set_result(name, "Selected", "0")
+                report.set_result(name, "Result", "⚠ skipped")
+                del pools[name]
+        if not pools:
+            raise click.UsageError(f"No generator of the selected apparatuses matches '{conf}'")
 
-    if failed :
-        logging.error("Something went wrong in the generation phase for: %s", ", ".join(failed))
-        if push :
-            logging.fatal("The push is not performed for any apparatus")
-        sys.exit(1)
+        if not push_only:
+            report.step("Generating configurations")
+            report.group_warnings(r"(?P<item>\S+) has no validation", "Generators without validation")
+            total = sum(len(g) for g in selected.values())
+            with report.progress(total) as progress:
+                listeners = {}
+                for name, pool in pools.items():
+                    report.current_apparatus = name
+                    listeners[name] = GenerationReporter(report, progress, name)
+                    pool.propagate_base(base=base, release_tag=release, conf_regex=conf_regex, no_push=True,
+                                        listener=listeners[name])
+                report.current_apparatus = None
 
-    if push or push_only :
+            failed = 0
+            for name, listener in listeners.items():
+                failed += len(listener.failed)
+                done = len(listener.succeeded) + len(listener.failed)
+                if listener.failed:
+                    report.set_result(name, "Generated", f"✘ {len(listener.succeeded)}/{done}")
+                    report.set_result(name, "Result", "✘ failed")
+                else:
+                    report.set_result(name, "Generated", f"✔ {done}")
+                    report.set_result(name, "Result", "✔ generated, not pushed" if push else "✔ generated")
+            if failed:
+                if push:
+                    report.notes.append("Nothing was pushed to any operation repository.")
+                report.notes.append(f"The failed branches are kept for inspection in {path}/<apparatus>.")
+                raise Stop(f"{failed} of {total} configurations failed",
+                           hint="Fix the failing generators or the base (see 'Failed configurations'), then run again")
+
+        if not pushing:
+            for name in pools:
+                report.set_result(name, "Result", "✔ generated")
+            report.success_message = f"{total} configurations generated for {', '.join(pools)}"
+            report.notes.append("Nothing was pushed: run again with --push-only to push them.")
+            return
+
+        report.step("Checking the push")
         ## only branches coming from a successful generation and accepted by the operation repos
         ## can be pushed, and they are checked for all the apparatuses before pushing anything
-        problems = {}
+        branches = {}
+        blocked = []
         for name, pool in pools.items():
-            pool_problems = pool.check_push(base=base, release_tag=release, conf_regex=conf_regex)
-            if pool_problems:
-                problems[name] = pool_problems
-        if problems :
-            for name, pool_problems in problems.items():
-                for problem in pool_problems:
-                    logging.error("%s: %s", name, problem)
-            logging.fatal("The push is not performed for any apparatus")
-            sys.exit(1)
+            report.current_apparatus = name
+            branches[name] = pool.get_local_configurations(base=base, release_tag=release, conf_regex=conf_regex) or []
+            problems = pool.check_push(base=base, release_tag=release, conf_regex=conf_regex)
+            for problem in problems:
+                report.error(f"{name}: {problem}")
+            if problems:
+                blocked.append(name)
+                report.set_result(name, "Result", "✘ push refused")
+            elif branches[name]:
+                report.ok(f"{name}: {len(branches[name])} configurations can be pushed")
+            else:
+                report.warn(f"{name}: no local configurations to push")
+        report.current_apparatus = None
+        if blocked:
+            report.notes.append("Nothing was pushed to any operation repository.")
+            raise Stop(f"The push check failed for {', '.join(blocked)}",
+                       hint="Regenerate the configurations (without --push-only), or check the operation repositories")
 
+        report.step("Pushing configurations")
+        pushed = []
         for name, pool in pools.items():
-            if not pool.push_configurations(base=base, release_tag=release, conf_regex=conf_regex):
-                logging.fatal("Push failed for %s, the remaining apparatuses are not pushed", name)
-                sys.exit(1)
+            report.current_apparatus = name
+            try:
+                ok = pool.push_configurations(base=base, release_tag=release, conf_regex=conf_regex)
+            except Exception as e:
+                ok = False
+                report.error(f"{name}: {e}")
+            if not ok:
+                report.set_result(name, "Result", "✘ push failed")
+                report.notes.append(f"Already pushed: {', '.join(pushed)}." if pushed else "Nothing was pushed.")
+                raise Stop(f"Pushing to {name} failed, the remaining apparatuses are not pushed",
+                           hint="Check the error above, then run again with --push-only")
+            pushed.append(name)
+            report.ok(f"{name}: {len(branches[name])} configurations pushed")
+            report.set_result(name, "Pushed", f"✔ {len(branches[name])}")
+        report.current_apparatus = None
 
-        logging.info("Removing configurations whose generators are gone")
+        report.step("Removing obsolete configurations")
+        removed_total = 0
         for name, pool in pools.items():
+            report.current_apparatus = name
             removals = pool.clean(base=base, release_tag=release)
-            if not removals:
-                logging.info("Nothing to remove for %s", name)
+            removed_total += len(removals)
+            if removals:
+                report.ok(f"{name}: removed {', '.join(removals)}")
+            else:
+                report.info(f"{name}: nothing to remove")
+            report.set_result(name, "Removed", str(len(removals)))
+            report.set_result(name, "Result", "✔ done")
+        report.current_apparatus = None
+
+        pushed_total = sum(len(b) for b in branches.values())
+        report.success_message = f"{pushed_total} configurations pushed to {', '.join(pools)}"
+        if removed_total:
+            report.notes.append(f"{removed_total} obsolete configurations removed.")
