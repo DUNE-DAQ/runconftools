@@ -63,7 +63,7 @@ In this case simply push with:
 cpm-update -a all -b mroda/my_dev -r mroda-test --push-only TempTest
 ```
 using the same apparati as for the generation. 
-Only push if the generation was successful, as `--push-only` does not check it.
+Nothing is pushed if any of the generated branches failed, so in that case fix the base and regenerate first.
 If the local area has served its purpose, just remove it:
 ```bash
 rm -rf TempTest

@@ -35,7 +35,8 @@ from runconftools.ConfPool import ConfPool
 @click.option("--conf", type=click.STRING, default=".*",
               help="Regex to select a subset of generators, matched from the start of the name (end it with '$' to match the whole name)")
 @click.option("--push-only", type=click.BOOL, default=False, is_flag=True,
-              help="When set, it only pushes the existing local branches, without regenerating nor verifying them")
+              help="When set, it skips the generation and only pushes the existing local branches. "
+                   "Nothing is pushed unless all of them come from a successful generation")
 @click.option("-p", "--push", type=click.BOOL, default=False, is_flag=True,
               help="Pushes the branches, otherwise they are only created locally")
 
@@ -79,8 +80,23 @@ def main(path, apparatus, base_url, operation_url, base, release, conf, push_onl
         sys.exit(1)
 
     if push or push_only :
-        for pool in pools.values():
-            pool.push_configurations(base=base, release_tag=release, conf_regex=conf_regex)
+        ## only branches coming from a successful generation can be pushed, and they are
+        ## checked for all the apparatuses before pushing anything
+        unverified = {}
+        for name, pool in pools.items():
+            branches = pool.get_unverified_configurations(base=base, release_tag=release, conf_regex=conf_regex)
+            if branches:
+                unverified[name] = branches
+        if unverified :
+            for name, branches in unverified.items():
+                logging.error("%s branches not coming from a successful generation: %s", name, ", ".join(branches))
+            logging.fatal("The push is not performed for any apparatus, regenerate the configurations first")
+            sys.exit(1)
+
+        for name, pool in pools.items():
+            if not pool.push_configurations(base=base, release_tag=release, conf_regex=conf_regex):
+                logging.fatal("Push failed for %s, the remaining apparatuses are not pushed", name)
+                sys.exit(1)
 
         logging.info("Removing configurations whose generators are gone")
         for name, pool in pools.items():

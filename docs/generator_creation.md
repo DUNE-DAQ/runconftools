@@ -91,7 +91,7 @@ They are stored in the base repository in `functions/verifiers/<name>.py` and mu
 def verify( path:str ) -> bool :
 ```
 which returns `True` if the configuration is correct. 
-If any verifier fails, the configuration is considered failed, so `cpm-update -p` does not push anything.
+If any verifier fails, the configuration is considered failed and it is never pushed, neither by `cpm-update -p` nor by `cpm-update --push-only`.
 
 ## Common operations
 It is possible to call other generators or common functions. 

@@ -262,3 +262,63 @@ def test_get_release(monkeypatch):
     assert ConfPool.get_release() == "fddaq-v5.7.2"
     monkeypatch.setenv("SPACK_RELEASE", "NFD_DEV_261029_A9")
     assert ConfPool.get_release() == "develop"
+
+
+# ---------------------------------------------------------------- push only verified configurations
+
+
+def update_args(tmp_path, remotes, base, *extra, apparatuses=("np02", "np04")):
+    return [str(tmp_path / "area"), "-a", ",".join(apparatuses), "--base_url", str(remotes["base"]),
+            *op_args(remotes, *apparatuses), "-b", base, "-r", "rel", *extra]
+
+
+def test_push_only_pushes_successful_generation(tmp_path, remotes):
+    assert run(cpm_update.main, update_args(tmp_path, remotes, "v1")).exit_code == 0
+    assert remote_branches(remotes["ops"]["np02"]) == {"main"}
+    assert run(cpm_update.main, update_args(tmp_path, remotes, "v1", "--push-only")).exit_code == 0
+    assert remote_branches(remotes["ops"]["np02"]) == {"main", "rel/gen_a", "rel/shared"}
+    assert remote_branches(remotes["ops"]["np04"]) == {"main", "rel/gen_b", "rel/shared"}
+
+
+def test_push_only_refuses_failed_generation(tmp_path, remotes):
+    ## np04/gen_b fails, np02 succeeds: nothing at all is pushed
+    assert run(cpm_update.main, update_args(tmp_path, remotes, "broken")).exit_code == 1
+    result = run(cpm_update.main, update_args(tmp_path, remotes, "broken", "--push-only"))
+    assert result.exit_code == 1
+    assert remote_branches(remotes["ops"]["np02"]) == {"main"}
+    assert remote_branches(remotes["ops"]["np04"]) == {"main"}
+
+
+def test_push_only_refuses_failed_regeneration(tmp_path, remotes):
+    ## a successful generation followed by a failed one of the same branch
+    assert run(cpm_update.main, update_args(tmp_path, remotes, "v1", apparatuses=("np04",))).exit_code == 0
+    assert run(cpm_update.main, update_args(tmp_path, remotes, "broken", apparatuses=("np04",))).exit_code == 1
+    result = run(cpm_update.main, update_args(tmp_path, remotes, "v1", "--push-only", apparatuses=("np04",)))
+    assert result.exit_code == 1
+    assert remote_branches(remotes["ops"]["np04"]) == {"main"}
+
+
+def test_push_only_refuses_modified_branch(tmp_path, remotes):
+    assert run(cpm_update.main, update_args(tmp_path, remotes, "v1", apparatuses=("np02",))).exit_code == 0
+    area = tmp_path / "area" / "np02"
+    git("checkout", "-q", "rel/gen_a", cwd=area)
+    (area / "README.md").write_text("manual change")
+    git("commit", "-qam", "manual", cwd=area)
+    result = run(cpm_update.main, update_args(tmp_path, remotes, "v1", "--push-only", apparatuses=("np02",)))
+    assert result.exit_code == 1
+    assert remote_branches(remotes["ops"]["np02"]) == {"main"}
+
+
+def test_push_configurations_refuses_unverified(tmp_path, remotes):
+    pool = ConfPool(pool_dir(tmp_path), apparatus="np04", operation_url=str(remotes["ops"]["np04"]),
+                    base_url=str(remotes["base"]))
+    assert not pool.propagate_base("broken", release_tag="rel", no_push=True)
+    assert pool.is_verified("rel/gen_b") is False
+    assert pool.get_unverified_configurations("broken", release_tag="rel") == ["rel/gen_b"]
+    assert pool.push_configurations("broken", release_tag="rel") is False
+    assert remote_branches(remotes["ops"]["np04"]) == {"main"}
+
+    assert pool.propagate_base("v1", release_tag="rel", no_push=True)
+    assert pool.is_verified("rel/gen_b") and pool.is_verified("rel/shared")
+    assert pool.push_configurations("v1", release_tag="rel") is True
+    assert remote_branches(remotes["ops"]["np04"]) == {"main", "rel/gen_b", "rel/shared"}

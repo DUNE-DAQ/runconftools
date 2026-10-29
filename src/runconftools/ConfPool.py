@@ -5,6 +5,7 @@ import re
 import sys
 from collections.abc import Iterable, Mapping
 from time import perf_counter
+from types import ModuleType
 
 import git
 
@@ -46,10 +47,12 @@ class ConfPool:
     methods that act on the base (e.g. ``get_base_branches``, ``checkout_base``, ``get_apparatuses``,
     ``get_generators``, ``get_verifiers``) can be used, the others raise a ``RuntimeError``.
 
-    Note that the ``functions`` directory of every pool is added to ``sys.path`` and the generator
-    modules are imported only once per process. Pools living in the same process must therefore
-    use the same base branch.
+    The modules of the base (generators, verifiers and common functions) are always imported from the
+    ``functions`` directory of the pool's own working tree, see ``import_function``.
     """
+
+    ## a local branch can be pushed only if it points to the commit recorded here, see is_verified
+    VERIFIED_REFS = "refs/runconftools/verified/"
 
     def __init__(
         self,
@@ -445,7 +448,7 @@ class ConfPool:
         base_module_name = "common."+self._require_apparatus() + ".config_base"
         base_module = None
         try :
-            base_module = importlib.import_module(base_module_name)
+            base_module = self.import_function(base_module_name)
         except Exception:
             ## the configuraiton has no base, so it's not safe to delete anything
             return []
@@ -473,6 +476,72 @@ class ConfPool:
 
 
 
+    def import_function(self, module_name: str) -> ModuleType:
+        """
+        Import a module from the ``functions`` directory of the local repository, e.g. ``generators.np02.monitoring``.
+
+        Python caches the imported modules, so after a checkout, or with several pools in the same process,
+        a plain import could return the code of another branch or of another pool.
+        Hence the modules previously imported from the ``functions`` directories are dropped from the cache
+        and the ``functions`` directory of this pool is put first in ``sys.path``.
+
+        Args:
+            module_name: full name of the module, relative to the ``functions`` directory.
+
+        Returns:
+            The freshly imported module.
+        """
+        functions = os.path.join(self.repo.working_dir, "functions")
+        if functions in sys.path:
+            sys.path.remove(functions)
+        sys.path.insert(0, functions)
+
+        ## the packages provided by the functions directories, e.g. generators, verifiers, common
+        packages = {"generators", "verifiers", "common", module_name.split(".")[0]}
+        for name in list(sys.modules):
+            if name.split(".")[0] in packages:
+                del sys.modules[name]
+        importlib.invalidate_caches()
+
+        return importlib.import_module(module_name)
+
+    def _set_verified(self, branch: str, verified: bool) -> None:
+        """
+        Record, or forget, that the current commit of a local branch comes from a successful generation.
+
+        The record is the local ref ``refs/runconftools/verified/<branch>``, which is never pushed.
+
+        Args:
+            branch: name of the local branch.
+            verified: if True the current commit of the branch is recorded, otherwise the record is removed.
+        """
+        ref = self.VERIFIED_REFS + branch
+        if verified:
+            self.repo.git.update_ref(ref, self.repo.heads[branch].commit.hexsha)
+        else:
+            self.repo.git.update_ref("-d", ref)
+
+    def is_verified(self, branch: str) -> bool:
+        """
+        Check that a local branch is exactly the result of a successful generation.
+
+        A generation is successful if the generator, the verifiers and the validator all succeeded.
+        Any later change of the branch, e.g. a failed regeneration or a manual commit, makes it unverified.
+
+        Args:
+            branch: name of the local branch.
+
+        Returns:
+            True if the branch exists and points to the commit recorded by a successful generation.
+        """
+        if branch not in [h.name for h in self.repo.heads]:
+            return False
+        try:
+            verified = self.repo.git.rev_parse("--verify", "--quiet", self.VERIFIED_REFS + branch)
+        except git.GitCommandError:
+            return False
+        return verified == self.repo.heads[branch].commit.hexsha
+
     def generate_conf(
             self, base: str, generator: str,
             release_tag: str | None = None, log_message: str | None = None, no_push:bool = False
@@ -487,6 +556,9 @@ class ConfPool:
         logging.debug("Available confs: " + ", ".join(confs))
 
         ref_name = release_tag + "/" + generator
+
+        ## until this generation succeeds, the branch must not be pushed
+        self._set_verified(ref_name, False)
 
         # prepare the branch
         if generator not in confs:
@@ -512,7 +584,7 @@ class ConfPool:
         # run the generator
         ## link the module
         module_name = "generators."+apparatus + "." + generator
-        module = importlib.import_module(module_name)
+        module = self.import_function(module_name)
 
         ## get the function
         genctor = getattr(module, "generate")
@@ -558,6 +630,8 @@ class ConfPool:
         else:
             logging.warning(f"{generator} has no validation")
 
+        self._set_verified(ref_name, True)
+
         # push the branch
         if not no_push :
             operation.push(f"{ref_name}")
@@ -600,27 +674,79 @@ class ConfPool:
 
         return ret
 
-    def push_configurations(self,
-                            base:str,
-                            release_tag:str|None = None,
-                            conf_regex: re.Pattern = re.compile(r".*") ) :
+    def get_local_configurations(self,
+                                 base:str,
+                                 release_tag:str|None = None,
+                                 conf_regex: re.Pattern = re.compile(r".*") ) -> list[str] | None :
+        """
+        Return the local branches of the generators of the base selected by ``conf_regex``.
 
-        operation = self._require_operation()
+        Args:
+            base: base branch defining the generators.
+            release_tag: release prefix of the branches, defaults to ``base``.
+            conf_regex: regex selecting the generators, matched from the start of the name.
+
+        Returns:
+            The existing local branches, ``<release_tag>/<generator>``, or None if the base does not exist.
+        """
         if not release_tag:
             release_tag = base
 
-        base_head = self.checkout_base(base)
-        if not base_head:
-            return
+        if self.checkout_base(base) is None:
+            return None
 
-        generators = self.get_generators(base)
         local_branches = [b.name for b in self.repo.branches]
-        for g in generators:
-            if conf_regex.match(g):
-                ref_name = f"{release_tag}/{g}"
-                if ref_name in local_branches :
-                    logging.info(f"Pushing {ref_name} to {self.apparatus} operations")
-                    operation.push(f"{ref_name}")
+        return [
+            f"{release_tag}/{g}" for g in self.get_generators(base)
+            if conf_regex.match(g) and f"{release_tag}/{g}" in local_branches
+        ]
+
+    def get_unverified_configurations(self,
+                                      base:str,
+                                      release_tag:str|None = None,
+                                      conf_regex: re.Pattern = re.compile(r".*") ) -> list[str] :
+        """
+        Return the local branches that ``push_configurations`` would push but that are not verified.
+
+        See ``get_local_configurations`` for the arguments and ``is_verified`` for the definition of verified.
+        """
+        branches = self.get_local_configurations(base, release_tag, conf_regex) or []
+        return [b for b in branches if not self.is_verified(b)]
+
+    def push_configurations(self,
+                            base:str,
+                            release_tag:str|None = None,
+                            conf_regex: re.Pattern = re.compile(r".*") ) -> bool :
+        """
+        Push the local branches of the generators of the base selected by ``conf_regex``.
+
+        Nothing is pushed unless all those branches come from a successful generation (see ``is_verified``),
+        so a failed or broken configuration never reaches the operation repository.
+
+        See ``get_local_configurations`` for the arguments.
+
+        Returns:
+            True if all the branches were pushed, False if nothing was pushed because the base does not
+            exist or some branches are not verified.
+        """
+        operation = self._require_operation()
+        branches = self.get_local_configurations(base, release_tag, conf_regex)
+        if branches is None:
+            logging.error(f"{base} not in the available base branches, nothing is pushed")
+            return False
+
+        unverified = [b for b in branches if not self.is_verified(b)]
+        if unverified:
+            logging.error(f"Nothing is pushed to {self.apparatus} operations, "
+                          f"these branches do not come from a successful generation: {', '.join(unverified)}")
+            return False
+
+        if not branches:
+            logging.warning(f"No local configurations to push to {self.apparatus} operations")
+        for b in branches:
+            logging.info(f"Pushing {b} to {self.apparatus} operations")
+            operation.push(b)
+        return True
 
     def clean(self,
               base:str,
@@ -665,7 +791,7 @@ class ConfPool:
             logging.warning("No verfiers are available")
         for v in verifiers:
             module_name = "verifiers."+v
-            module = importlib.import_module(module_name)
+            module = self.import_function(module_name)
             functor = getattr(module, "verify")
             res = functor(self.repo.working_dir)
             if not res :
