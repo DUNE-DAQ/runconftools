@@ -65,6 +65,24 @@ This can be done by adding to your `.gitconfig` file the following block:
 This repository provides the following scripts.
 All script names start with `cpm-`, which stands for Configuration Pool Management.
 
+### Working on several apparatuses
+All the scripts accept one or more apparatuses with `-a`, either repeating the option or as a comma separated list:
+```bash
+cpm-update -b fddaq-v5.7.2 -r fddaq-v5.7.2 -a np02,np04 TempTest
+cpm-update -b fddaq-v5.7.2 -r fddaq-v5.7.2 -a np02 -a np04 TempTest
+```
+`-a all` selects all the apparatuses: for `cpm-setup` and `cpm-update` these are the subdirectories of `functions/generators` in the selected base, 
+for `cpm-purge`, which has no base, these are the apparatuses with a default operation repository in `runconftools`.
+
+Every apparatus gets its own local repository in `PATH/<apparatus>` (e.g. `TempTest/np02`), since the configuration branches of different apparatuses share the same names. 
+With `-a all`, the base is inspected in `PATH/_base`.
+
+The operation repositories default to the ones known by `runconftools`. 
+They can be overridden per apparatus with `--operation_url <apparatus>=<url>`, which is mandatory for apparatuses without a default.
+A plain `--operation_url <url>` is still accepted when a single apparatus is selected.
+
+When several apparatuses are updated with `-p`, the configurations are first generated for all of them and nothing is pushed unless all the generations succeeded.
+
 
 ### cpm-setup 
 This is a diagnostic script designed to setup a local area linked to both base and operation repostiories and to print some information about the configurations.
@@ -77,10 +95,19 @@ Usage: cpm-setup [OPTIONS] PATH
   inspection.
 
 Options:
-  -a, --apparatus TEXT         Selection of the apparatus  [default: np02]
+  -a, --apparatus TEXT         Apparatuses to act on, either repeating the
+                               option or as a comma separated list, e.g. '-a
+                               np02,np04'. Use 'all' for all the apparatuses
+                               defined in the base. Each apparatus
+                               uses the local repo PATH/<apparatus>  [default:
+                               np02]
   --base_url TEXT              [default: https://gitlab.cern.ch/dune-
                                daq/online/ehn1-daqconfigs.git]
-  --operation_url TEXT
+  --operation_url TEXT         URL of the operation repo as
+                               <apparatus>=<url>, repeated or comma separated.
+                               Apparatuses without an explicit URL use their
+                               default repo. A plain <url> is accepted when a
+                               single apparatus is selected
   -r, --release TEXT           [default: fddaq-v5.2.2]
   -b, --base TEXT              If None, it is set equal to the release
   -c, --conf TEXT
@@ -88,7 +115,7 @@ Options:
   --help                       Show this message and exit.
 ```
 
-The `PATH` must be an existing location and has to be either empty or a valid `ehn1-daqconfigs` repository. 
+For each apparatus, `PATH/<apparatus>` is created if needed and has to be either empty or a valid `ehn1-daqconfigs` repository. 
 If the directory contains a local repository, local changes may be lost so please push all changes that are important before calling `cpm-setup` on a non-empty directory.
 
 This script sets up a git repository and prints some information about the release. 
@@ -111,13 +138,20 @@ Usage: cpm-update [OPTIONS] PATH
   branches are not pushed, use -p  or --push-only to perform the push
 
 Options:
-  -a, --apparatus TEXT         Selection of the apparatus  [default: np02]
+  -a, --apparatus TEXT         Apparatuses to act on, either repeating the
+                               option or as a comma separated list, e.g. '-a
+                               np02,np04'. Use 'all' for all the apparatuses
+                               defined in the base. Each apparatus
+                               uses the local repo PATH/<apparatus>  [default:
+                               np02]
   --base_url TEXT              Git location of the remote base repo  [default:
                                ssh://git@gitlab.cern.ch:7999/dune-
                                daq/online/ehn1-daqconfigs.git]
-  --operation_url TEXT         Git location of the remote operation repo. If
-                               None, the repo is set according to the
-                               apparatus
+  --operation_url TEXT         URL of the operation repo as
+                               <apparatus>=<url>, repeated or comma separated.
+                               Apparatuses without an explicit URL use their
+                               default repo. A plain <url> is accepted when a
+                               single apparatus is selected
   -b, --base TEXT              Base branch to be used as a starting point
                                [default: fddaq-v5.2.2]
   -r, --release TEXT           Operation branch prefix for the generated
@@ -132,7 +166,7 @@ Options:
   --help                       Show this message and exit.
 ```
 
-As for the setup, `PATH` has to be an existing location and has to be either empty or a valid `ehn1-configs` repository. 
+As for the setup, `PATH/<apparatus>` has to be either empty or a valid `ehn1-configs` repository. 
 As previously, ensure local changes are pushed before using an existing path with this script.
 It is recommended that a new directory is created for the operation. 
 It can be deleted once the propagation is complete. 
@@ -167,13 +201,20 @@ Usage: cpm-purge [OPTIONS] PATH
   a given release
 
 Options:
-  -a, --apparatus TEXT         Selection of the apparatus  [default: np02]
+  -a, --apparatus TEXT         Apparatuses to act on, either repeating the
+                               option or as a comma separated list, e.g. '-a
+                               np02,np04'. Use 'all' for all the apparatuses
+                               with a default operation repo. Each apparatus
+                               uses the local repo PATH/<apparatus>  [default:
+                               np02]
   --base_url TEXT              Git location of the remote base repo  [default:
                                ssh://git@gitlab.cern.ch:7999/dune-
                                daq/online/ehn1-daqconfigs.git]
-  --operation_url TEXT         Git location of the remote operation repo. If
-                               None, the repo is set according to the
-                               apparatus
+  --operation_url TEXT         URL of the operation repo as
+                               <apparatus>=<url>, repeated or comma separated.
+                               Apparatuses without an explicit URL use their
+                               default repo. A plain <url> is accepted when a
+                               single apparatus is selected
   -r, --release TEXT           Operation branch prefix for the branches to be
                                deleted
   --conf TEXT                  Regex to select a subset of branches  [default:

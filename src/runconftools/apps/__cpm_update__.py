@@ -3,31 +3,31 @@
 # @file cpm-update is the executable used to interact with the ConfigPool class and propagate changes from a base branch to the relevant operation branches
 import logging
 import re
-from pathlib import Path
+import sys
 
 import click
 
-from runconftools.Apparatus import Apparatus 
+from runconftools.apps._common import (
+    apparatus_option,
+    check_apparatuses,
+    log_apparatus,
+    open_pools,
+    operation_url_option,
+    select_apparatuses,
+)
 from runconftools.ConfPool import ConfPool
 
 
-@click.command(context_settings={'show_default': True}) 
+@click.command(context_settings={'show_default': True})
 @click.argument("path", type=click.Path(exists=False, file_okay=False, readable=True, writable=True))
-@click.option("-a", "--apparatus",
-              type=click.STRING, 
-              default="np02", help="Selection of the apparatus")
+@apparatus_option("all the apparatuses defined in the base")
 @click.option(
     "--base_url",
     type=click.STRING,
     default="ssh://git@gitlab.cern.ch:7999/dune-daq/online/ehn1-daqconfigs.git",
-    help="URLof the remote base repo"
+    help="URL of the remote base repo"
 )
-@click.option(
-    "--operation_url",
-    type=click.STRING,
-    default=None,
-    help="URL of the remote operation repo. If None, the repo is set according to the apparatus"
-)
+@operation_url_option()
 @click.option("-b", "--base", type=click.STRING, default = ConfPool.get_release(),
               help="Base branch to be used as a starting point")
 @click.option("-r", "--release", type=click.STRING, default = ConfPool.get_release(),
@@ -37,7 +37,7 @@ from runconftools.ConfPool import ConfPool
 @click.option("--push-only", type=click.BOOL, default=False, is_flag=True,
               help="When set, it only pushes local branches, without regenerating")
 @click.option("-p", "--push", type=click.BOOL, default=False, is_flag=True,
-              help="Pushes the branhces, otherwise they are only created locally")
+              help="Pushes the branches, otherwise they are only created locally")
 
 @click.option(
     "--debug",
@@ -49,8 +49,9 @@ from runconftools.ConfPool import ConfPool
 def main(path, apparatus, base_url, operation_url, base, release, conf, push_only, push, debug):
 
     """
-    This script takes the base branch and propagates the changes to the operation repo, creating the necessary configurations.
-    As a default, the branches are not pushed, use -p  or --push-only to perform the push
+    This script takes the base branch and propagates the changes to the operation repos, creating the necessary configurations.
+    As a default, the branches are not pushed, use -p  or --push-only to perform the push.
+    When several apparatuses are selected, nothing is pushed unless the generation succeeded for all of them.
     """
 
     logging.basicConfig(
@@ -59,31 +60,30 @@ def main(path, apparatus, base_url, operation_url, base, release, conf, push_onl
         datefmt="%Y-%m-%d %H:%M:%S",
     )
 
+    operation_urls = select_apparatuses(path, base_url, base, apparatus, operation_url, ssh=True)
+    pools = open_pools(path, operation_urls, base_url)
+    check_apparatuses(pools, base)
+    conf_regex = re.compile(conf)
 
-    if not operation_url :
-        apparatus_enum = Apparatus.from_string(apparatus)
-        operation_url = apparatus_enum.ssh_url()
-
-    Path(path).mkdir(parents=True, exist_ok=True)
-    
-    pool = ConfPool(path, operation_url=operation_url, base_url=base_url, apparatus=apparatus)
-
-    all_ok = True
+    failed = []
     if not push_only :
-        all_ok = pool.propagate_base(base=base, release_tag=release, conf_regex=re.compile(conf), no_push=True)
+        for name, pool in pools.items():
+            log_apparatus(name)
+            if not pool.propagate_base(base=base, release_tag=release, conf_regex=conf_regex, no_push=True):
+                failed.append(name)
 
+    if failed :
+        logging.error("Something went wrong in the generation phase for: %s", ", ".join(failed))
+        if push :
+            logging.fatal("The push is not performed for any apparatus")
+        sys.exit(1)
 
-    if (not all_ok) and push :
-        logging.fatal("Something went wrong in the generation phase so the push is not performed")
-        return
-        
-    if (push and all_ok) or push_only :
-        pool.push_configurations(base=base, release_tag=release, conf_regex=re.compile(conf))
+    if push or push_only :
+        for pool in pools.values():
+            pool.push_configurations(base=base, release_tag=release, conf_regex=conf_regex)
 
-    if (push or push_only) :
         logging.info("Removing configurations whose generators are gone")
-        removals = pool.clean(base=base, release_tag=release)
-        if not removals:
-            logging.info("Nothing to remove")
-
-
+        for name, pool in pools.items():
+            removals = pool.clean(base=base, release_tag=release)
+            if not removals:
+                logging.info("Nothing to remove for %s", name)

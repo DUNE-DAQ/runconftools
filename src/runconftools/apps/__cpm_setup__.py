@@ -1,34 +1,31 @@
 #!/usr/bin/env python3
 
 # @file cpm-setup is the executable used to interact with the ConfigPool class and setup a working environment
-from runconftools.Apparatus import Apparatus 
-
 import logging
 import re
-from pathlib import Path
 
 import click
 
+from runconftools.apps._common import (
+    apparatus_option,
+    log_apparatus,
+    open_pools,
+    operation_url_option,
+    select_apparatuses,
+)
 from runconftools.ConfPool import ConfPool
 
 
 @click.command(context_settings={'show_default': True})
 @click.argument("path", type=click.Path(exists=False, file_okay=False, writable=True))
-@click.option("-a", "--apparatus",
-              type=click.STRING,
-              default="np02", help="Selection of the apparatus")
+@apparatus_option("all the apparatuses defined in the base")
 @click.option(
     "--base_url",
     type=click.STRING,
     default="https://gitlab.cern.ch/dune-daq/online/ehn1-daqconfigs.git",
     help="URL of the base repository"
 )
-@click.option(
-    "--operation_url",
-    type=click.STRING,
-    default=None,
-    help="URL of the operation repository. If None, it's picked based on the apparatus"
-)
+@operation_url_option()
 @click.option("-r", "--release", type=click.STRING, default = ConfPool.get_release())
 @click.option("-b", "--base", type=click.STRING, default = None, help="If None, it's set equal to the release")
 @click.option("-c", "--conf", type=click.STRING, default=None, help="Configuration key to be checked out. If None, the base is checked out instead")
@@ -42,8 +39,8 @@ from runconftools.ConfPool import ConfPool
 def main(path, apparatus, base_url, operation_url, release, base, conf, debug):
 
     """
-    Set up a local repo and prints some information. 
-    If the conf option is specified, the chosen configuration from operation is checked out for inspection. 
+    Set up a local repo per apparatus and prints some information.
+    If the conf option is specified, the chosen configuration from operation is checked out for inspection.
     """
 
     logging.basicConfig( format="%(asctime)s %(levelname)-8s %(message)s",
@@ -51,37 +48,33 @@ def main(path, apparatus, base_url, operation_url, release, base, conf, debug):
                          datefmt="%Y-%m-%d %H:%M:%S",
     )
 
-
-    if not operation_url :
-        apparatus_enum = Apparatus.from_string(apparatus)
-        operation_url = apparatus_enum.https_url()
-
-    Path(path).mkdir(parents=True, exist_ok=True)
-
-    pool = ConfPool(path, operation_url=operation_url, base_url=base_url, apparatus=apparatus)
-
-    bases = pool.get_base_branches()
-    logging.info("Available bases: {}".format(", ".join(bases)))
-
-    versions = pool.get_daq_versions()
-    logging.info(
-        "Configurations are available for the following releases: {}".format(
-            ", ".join(versions)
-        )
-    )
-
     if not base :
         base = release
-    gens = pool.get_generators(base=base)
-    logging.info("Available Generators: {}".format(", ".join(gens)))
 
-    confs = pool.get_confs(release=re.compile(release))
-    logging.info("Available Configurations: {}".format(", ".join(confs)))
+    operation_urls = select_apparatuses(path, base_url, base, apparatus, operation_url, ssh=False)
+    pools = open_pools(path, operation_urls, base_url)
 
-    verifiers = pool.get_verifiers(base=base)
-    logging.info("Available verifiers: {}".format(", ".join(verifiers)))
-    
-    if conf:
-        pool.checkout_conf(release=release, conf=conf)
+    for name, pool in pools.items():
+        log_apparatus(name)
 
+        bases = pool.get_base_branches()
+        logging.info("Available bases: {}".format(", ".join(bases)))
 
+        versions = pool.get_daq_versions()
+        logging.info(
+            "Configurations are available for the following releases: {}".format(
+                ", ".join(versions)
+            )
+        )
+
+        gens = pool.get_generators(base=base)
+        logging.info("Available Generators: {}".format(", ".join(gens)))
+
+        confs = pool.get_confs(release=re.compile(release))
+        logging.info("Available Configurations: {}".format(", ".join(confs)))
+
+        verifiers = pool.get_verifiers(base=base)
+        logging.info("Available verifiers: {}".format(", ".join(verifiers)))
+
+        if conf:
+            pool.checkout_conf(release=release, conf=conf)
