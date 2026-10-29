@@ -3,7 +3,7 @@ import re
 import click
 import pytest
 from click.testing import CliRunner
-from conftest import git, remote_branches
+from conftest import git, push_base_branch, remote_branches
 
 from runconftools.Apparatus import Apparatus
 from runconftools.apps import __cpm_purge__ as cpm_purge
@@ -197,3 +197,68 @@ def test_setup_list_checks_out_each_apparatus(tmp_path, remotes):
         area = tmp_path / "area" / apparatus
         assert git("rev-parse", "--abbrev-ref", "HEAD", cwd=area).strip() == "rel/shared"
         assert (area / "README.md").read_text() == apparatus
+
+
+# ---------------------------------------------------------------- commit
+
+NEW_FILE_GENERATOR = """
+from pathlib import Path
+
+def generate(path: str) -> bool:
+    Path(path, "new_file.txt").write_text("new")
+    return True
+"""
+
+NOOP_GENERATOR = """
+def generate(path: str) -> bool:
+    return True
+"""
+
+
+def test_generator_adding_only_new_files_is_committed(tmp_path, remotes):
+    push_base_branch(remotes["base"], tmp_path / "remotes" / "base_new", "new", {"np02": {"adder": NEW_FILE_GENERATOR}})
+    args = [str(tmp_path / "area"), "-a", "np02", "--base_url", str(remotes["base"]),
+            *op_args(remotes, "np02"), "-b", "new", "-r", "rel", "-p"]
+    assert run(cpm_update.main, args).exit_code == 0
+    assert git("show", "rel/adder:new_file.txt", cwd=remotes["ops"]["np02"]) == "new"
+
+
+def test_base_changes_reach_existing_noop_configuration(tmp_path, remotes):
+    work = tmp_path / "remotes" / "base_noop"
+    push_base_branch(remotes["base"], work, "noop", {"np02": {"noop": NOOP_GENERATOR}})
+    args = [str(tmp_path / "area"), "-a", "np02", "--base_url", str(remotes["base"]),
+            *op_args(remotes, "np02"), "-b", "noop", "-r", "rel", "-p"]
+    assert run(cpm_update.main, args).exit_code == 0
+    assert git("show", "rel/noop:README.md", cwd=remotes["ops"]["np02"]) == "noop"
+
+    ## change the base: the existing configuration is regenerated and must pick up the change
+    (work / "README.md").write_text("updated")
+    git("commit", "-qam", "update base", cwd=work)
+    git("push", "-q", str(remotes["base"]), "noop", cwd=work)
+    assert run(cpm_update.main, args).exit_code == 0
+    assert git("show", "rel/noop:README.md", cwd=remotes["ops"]["np02"]) == "updated"
+
+
+def test_commit_returns_whether_something_was_committed(tmp_path, remotes):
+    path = tmp_path / "pool"
+    pool = ConfPool(pool_dir(tmp_path), apparatus="np02", base_url=str(remotes["base"]))
+    pool.checkout_base("v1")
+    head = pool.repo.head.commit
+    assert not pool.commit("nothing")
+    assert pool.repo.head.commit == head
+
+    (path / "README.md").unlink()
+    (path / "added.txt").write_text("x")
+    assert pool.commit("delete and add")
+    assert not pool.repo.is_dirty(untracked_files=True)
+    assert {d.a_path for d in head.diff(pool.repo.head.commit)} == {"README.md", "added.txt"}
+
+
+def test_get_release(monkeypatch):
+    monkeypatch.delenv("SPACK_RELEASE", raising=False)
+    assert ConfPool.get_release() == "develop"
+    assert ConfPool.get_release(default="x") == "x"
+    monkeypatch.setenv("SPACK_RELEASE", "fddaq-v5.7.2-a9-1")
+    assert ConfPool.get_release() == "fddaq-v5.7.2"
+    monkeypatch.setenv("SPACK_RELEASE", "NFD_DEV_261029_A9")
+    assert ConfPool.get_release() == "develop"

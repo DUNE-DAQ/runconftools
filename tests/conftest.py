@@ -1,12 +1,8 @@
-import os
 import subprocess
 import sys
 from pathlib import Path
 
 import pytest
-
-## the command line defaults are computed at import time from SPACK_RELEASE
-os.environ.setdefault("SPACK_RELEASE", "fddaq-v0.0.0-a9-1")
 
 GENERATOR = '''
 from pathlib import Path
@@ -27,8 +23,12 @@ def remote_branches(url: Path) -> set[str]:
     return {line.split("refs/heads/")[1] for line in out.splitlines()}
 
 
-def push_base_branch(base: Path, work: Path, branch: str, generators: dict[str, dict[str, bool]]) -> None:
-    """Push ``branch`` to ``base``, with ``generators[apparatus][name] = result``, built in the new repo ``work``."""
+def push_base_branch(base: Path, work: Path, branch: str, generators: dict[str, dict[str, bool | str]]) -> None:
+    """
+    Push ``branch`` to ``base``, built in the new repo ``work``.
+
+    ``generators[apparatus][name]`` is either the result of the default generator or the generator source.
+    """
     git("init", "-q", "-b", branch, str(work))
     (work / "README.md").write_text(branch)
     for apparatus, gens in generators.items():
@@ -36,7 +36,8 @@ def push_base_branch(base: Path, work: Path, branch: str, generators: dict[str, 
         d.mkdir(parents=True)
         (d / "__init__.py").write_text("")
         for name, result in gens.items():
-            (d / f"{name}.py").write_text(GENERATOR.format(name=name, apparatus=apparatus, result=result))
+            source = result if isinstance(result, str) else GENERATOR.format(apparatus=apparatus, result=result)
+            (d / f"{name}.py").write_text(source)
     git("add", "-A", cwd=work)
     git("commit", "-qm", f"base {branch}", cwd=work)
     git("push", "-q", str(base), branch, cwd=work)

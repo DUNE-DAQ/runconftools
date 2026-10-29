@@ -276,7 +276,19 @@ class ConfPool:
 
     @staticmethod
     def get_release(default:str = "develop") -> str :
-        name = os.environ["SPACK_RELEASE"]
+        """
+        Return the DAQ release of the environment, e.g. ``fddaq-v5.7.2`` for ``fddaq-v5.7.2-a9-1``.
+
+        Args:
+            default: value returned if ``SPACK_RELEASE`` is not set or is not a stable release (e.g. a nightly).
+
+        Returns:
+            The release name, or ``default``.
+        """
+        name = os.environ.get("SPACK_RELEASE")
+        if not name:
+            logging.debug(f"SPACK_RELEASE is not set, using {default} as release")
+            return default
         regex = re.compile(r"^([^-]+-v[0-9]+\.[0-9]+\.[0-9]+[^-]*)-[^-]+-[0-9]+$")
         match = regex.match(name)
         if match :
@@ -664,25 +676,31 @@ class ConfPool:
         return True
 
 
-    def commit(self, message: str):
-        # find the changes
-        files = self.repo.git.diff(None, name_only=True)
-        if not files:
-            return
+    def commit(self, message: str) -> bool:
+        """
+        Stage all the changes (modified, deleted and new files) and commit them.
 
-        file_list = files.split("\n")
-        logging.debug("Files that changed: " + ", ".join(file_list))
-        for f in file_list:
-            self.repo.git.add(f)
+        The changes already in the index are committed too, e.g. the base restored by ``generate_conf``.
 
-        ## add possible additional file in case they are useful for backup
-        files = self.repo.untracked_files
-        for f in files :
+        Args:
+            message: commit message.
+
+        Returns:
+            True if a commit was made, False if there was nothing to commit.
+        """
+        ## new files are added too, in case they are useful for backup
+        for f in self.repo.untracked_files:
             logging.info(f"Adding new file: {f}")
-            self.repo.git.add(f)
+        self.repo.git.add(A=True)
 
-        # commit
+        ## compare the index with HEAD, so that changes staged before the call are not missed
+        if not self.repo.is_dirty(index=True, working_tree=False, untracked_files=False):
+            logging.debug("Nothing to commit")
+            return False
+
+        logging.debug("Files that changed: " + ", ".join(d.a_path for d in self.repo.index.diff("HEAD")))
         self.repo.git.commit("-m", message)
+        return True
 
 
     def remove_configurations(self,

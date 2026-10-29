@@ -28,10 +28,10 @@ from runconftools.ConfPool import ConfPool
     help="URL of the remote base repo"
 )
 @operation_url_option()
-@click.option("-b", "--base", type=click.STRING, default = ConfPool.get_release(),
-              help="Base branch to be used as a starting point")
-@click.option("-r", "--release", type=click.STRING, default = ConfPool.get_release(),
-              help="Operation branch prefix for the generated branches")
+@click.option("-b", "--base", type=click.STRING, default = ConfPool.get_release,
+              help="Base branch to be used as a starting point. Defaults to the release from SPACK_RELEASE, or develop if it's not set or not a stable release")
+@click.option("-r", "--release", type=click.STRING, default = ConfPool.get_release,
+              help="Operation branch prefix for the generated branches. Defaults to the release from SPACK_RELEASE, or develop if it's not set or not a stable release")
 @click.option("--conf", type=click.STRING, default=".*",
               help="Regex to select a subset of generators")
 @click.option("--push-only", type=click.BOOL, default=False, is_flag=True,
