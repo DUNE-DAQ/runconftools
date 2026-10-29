@@ -8,12 +8,16 @@ So, creating a configuration is equivalent to write the corresponding generator.
 
 ## Generator structure
 Generators are stored in the base repo, as they are specific for the base that they have to work upon in order to create the necessary configuration. 
-Specifically, they are stored in the folder `functions/generators` directory in the subdirectory specific for the apparatus relevant for the generator. 
+Specifically, they are stored in the `functions/generators` directory, in the subdirectory specific for the apparatus relevant for the generator, e.g. `functions/generators/np02`. 
 
-Generators are python modules and are expected to be named with with `<configuration_name>.py`. 
+These subdirectories define the apparati of the base: adding a new subdirectory adds a new apparatus, which is then also selected by `-a all`. 
+As the generators are imported as `generators.<apparatus>.<configuration_name>`, the subdirectory name must be a valid python name (no `-`) and the subdirectory should contain an `__init__.py` file, as the existing ones. 
+A new apparatus also needs its own operation repository: either add its default URLs to `src/runconftools/Apparatus.py`, or pass it to the scripts with `--operation_url <apparatus>=<url>`.
+
+Generators are python modules and are expected to be named with `<configuration_name>.py`. 
 As the generators might be imported by other generators, their names cannot contain `-`. 
 
-Generators will have to contains a generate function with signature
+Generators have to contain a generate function with signature
 ```python
 def generate( path:str ) -> bool :
 ```
@@ -23,14 +27,14 @@ This will be handled by the runconftools scripts.
 The generate function must return `True` once the generation is successfully completed. 
 Otherwise, it should return `False` or raise an exception. 
 
-In order to use the configutions in the base repository, some environmental variables need to be set. 
+In order to use the configurations in the base repository, some environmental variables need to be set. 
 This is usually done with the script `setup_db_path.sh` contained in the base. 
 While writing a generator, one should assume that those environmental variables are correctly setup and should not try to set them from the scripts. 
 
 ### Good practices
 
 As the generator is a python script, one could do everything. 
-Yet it is recommended that the OKS database are managed through the OKS, conffwk or daqconf python interfaces/scripts which guarantess type safety. 
+Yet it is recommended that the OKS database are managed through the OKS, conffwk or daqconf python interfaces/scripts which guarantee type safety. 
 One should not change the files using python `open` or other low level file editing tools. 
 
 It is also recommended that we limit the changes to the objects to just changing the references rather than the attributes of the objects. 
@@ -52,11 +56,12 @@ python my_generator.py /path/to/base
 Or something very similar in spirit. 
 
 While developing, personal experience suggested that is quite useful to develop the generator by initially saving the file outside the local base git repository. 
-In this way the chages made to the base by executing the generator can simply be reverted with a 
+In this way the changes made to the base by executing the generator can simply be reverted with a 
 ```bash
-(cd /path/to/base; git restore)
+(cd /path/to/base; git restore .)
 ```
-Once the development is done and the result of the generator is tested, ideally with a succesful run, the file can be added to the base git repository, committed, pushed to the remote base and the operation repository can be updated. 
+Note that `git restore` does not remove the new files that the generator might have created, check them with `git status`. 
+Once the development is done and the result of the generator is tested, ideally with a successful run, the file can be added to the base git repository, committed, pushed to the remote base and the operation repository can be updated. 
 
 ## Validators
 
@@ -70,10 +75,28 @@ As with the `generate` function, this is called by the runconftools scripts.
 
 The function must return `True` in case the configuration is found to be correct by the function, or `False` otherwise. 
 
+## What happens after the generator
+When `cpm-update` runs a generator, it executes the following steps in the local repository of the apparatus:
+ 1. The local branch `<release>/<configuration_name>` is prepared: it starts from the base, or, if the configuration already exists, the existing branch is reset to the content of the base. 
+ 2. The `generate` function is called. If it returns `False`, the changes are committed locally and the configuration is considered failed.
+ 3. The files listed by the function `irrelevant_files()` of `functions/common/<apparatus>/config_base.py`, if present, are removed. This is used to remove the sessions of other apparati.
+ 4. The verifiers are executed. 
+ 5. All the changes, including new files, are committed locally. 
+ 6. If the verifiers succeeded, the `validate` function of the generator is called, if present.
+
+## Verifiers
+Verifiers are checks executed on every generated configuration, regardless of the apparatus. 
+They are stored in the base repository in `functions/verifiers/<name>.py` and must contain a function
+```python
+def verify( path:str ) -> bool :
+```
+which returns `True` if the configuration is correct. 
+If any verifier fails, the configuration is considered failed, so `cpm-update -p` does not push anything.
+
 ## Common operations
 It is possible to call other generators or common functions. 
-Common functions should be store in the base repository, in the directory `functions/common`. 
-As the function directory is added to the `PYTHONPATH`, one can invoke those functions just by importing. 
+Common functions should be stored in the base repository, in the directory `functions/common`. 
+As the `functions` directory is added to the python path (`sys.path`) by runconftools, one can invoke those functions just by importing. 
 For example:
 ```python
 import common.trigger
@@ -82,8 +105,9 @@ Same for other generators, that can be imported using
 ```python
 import generators.np02.monitoring_no_tpg
 ```
-The import of other generators or commong functions has to be done from withing the module functions or the import will fail when calling the generator in a testing phase. 
-The structure of the process name validator block to be used when calling other generator or common function will look like 
+When the generator is tested by executing it directly, the `functions` directory is not in the python path, so it has to be added in the `__main__` block. 
+As this happens after the module is loaded, the import of other generators or common functions has to be done from within the module functions, or the import will fail when calling the generator in a testing phase. 
+The `__main__` block to be used when calling other generators or common functions will look like 
 ```python
 if __name__ == '__main__':
     sys.path.append(sys.argv[1] + "/functions")
@@ -97,7 +121,7 @@ if __name__ == '__main__':
 import sys
 
 import conffwk
-import confmodel
+import confmodel_dal as confmodel
 
 import daqconf.include as include
 

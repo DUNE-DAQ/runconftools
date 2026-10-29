@@ -33,9 +33,9 @@ from runconftools.ConfPool import ConfPool
 @click.option("-r", "--release", type=click.STRING, default = ConfPool.get_release,
               help="Operation branch prefix for the generated branches. Defaults to the release from SPACK_RELEASE, or develop if it's not set or not a stable release")
 @click.option("--conf", type=click.STRING, default=".*",
-              help="Regex to select a subset of generators")
+              help="Regex to select a subset of generators, matched from the start of the name (end it with '$' to match the whole name)")
 @click.option("--push-only", type=click.BOOL, default=False, is_flag=True,
-              help="When set, it only pushes local branches, without regenerating")
+              help="When set, it only pushes the existing local branches, without regenerating nor verifying them")
 @click.option("-p", "--push", type=click.BOOL, default=False, is_flag=True,
               help="Pushes the branches, otherwise they are only created locally")
 

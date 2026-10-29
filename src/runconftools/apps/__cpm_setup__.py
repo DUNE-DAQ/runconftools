@@ -28,7 +28,7 @@ from runconftools.ConfPool import ConfPool
 @operation_url_option()
 @click.option("-r", "--release", type=click.STRING, default = ConfPool.get_release,
               help="Release whose configurations are listed. Defaults to the release from SPACK_RELEASE, or develop if it's not set or not a stable release")
-@click.option("-b", "--base", type=click.STRING, default = None, help="If None, it's set equal to the release")
+@click.option("-b", "--base", type=click.STRING, default = None, help="Base branch to inspect. If None, it's set equal to the release")
 @click.option("-c", "--conf", type=click.STRING, default=None, help="Configuration key to be checked out. If None, the base is checked out instead")
 @click.option(
     "--debug",
@@ -40,7 +40,7 @@ from runconftools.ConfPool import ConfPool
 def main(path, apparatus, base_url, operation_url, release, base, conf, debug):
 
     """
-    Set up a local repo per apparatus and prints some information.
+    Set up a local repo per apparatus and print some information.
     If the conf option is specified, the chosen configuration from operation is checked out for inspection.
     """
 

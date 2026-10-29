@@ -11,7 +11,7 @@ cd MyArea/
 source env.sh 
 dbt-workarea-env 
 dbt-build
-git clone ssh://git@gitlab.cern.ch:7999/dune-daq/online/runconftools.git 
+git clone https://github.com/DUNE-DAQ/runconftools.git
 cd runconftools
 pip install .
 cd ..
@@ -46,20 +46,24 @@ But the test depends on the type of changes.
 If you just added a generator but the OKS objects in the base are unchanged, then there is no need to test all the generators.
 Assuming the new generator is tested by the developers, we can just merge.
 If there are changes in the OKS objects, we need to test that the generators are still functioning correctly.
-So before merging, I would test the generator doing the following:
+As the OKS objects can be shared by several apparati, the generators of all of them should be tested.
+So before merging, I would test the generators doing the following:
 ```bash
 cd ..   ##to go back to the previous level
-mkdir TempTest ## to run the generator on a test area so local changes are not lost
-cpm-update -b mroda/my_dev -r mroda-test --no-push TempTest 
+## run the generators on a test area so local changes are not lost, by default nothing is pushed
+cpm-update -a all -b mroda/my_dev -r mroda-test TempTest
 ```
 Here you will see if the generators keep working correctly. 
-You can even inspect all the generated branches. 
+You can even inspect all the generated branches, in the local repository of each apparatus, e.g. `TempTest/np02`. 
+If only some apparati are affected by the change, they can be listed instead of `all`, e.g. `-a np02,np02_emu`.
 
 If you need to push the branches on operation so that they can be tested by a shifter, you can do that too. 
 In this case simply push with:
 ```bash
-cpm-update -b mroda/my_dev -r mroda-test --push-only TempTest
+cpm-update -a all -b mroda/my_dev -r mroda-test --push-only TempTest
 ```
+using the same apparati as for the generation. 
+Only push if the generation was successful, as `--push-only` does not check it.
 If the local area has served its purpose, just remove it:
 ```bash
 rm -rf TempTest
@@ -74,11 +78,16 @@ Once the merge is done we just need to recreate the operation branches for the p
 Most likely this is an operation done by run coordinators. 
 
 ```bash
-mkdir Temp
-cpm-update -b fddaq-v5.2.2 -r fddaq-v5.2.2 Temp 
+cpm-update -a all -b fddaq-v5.2.2 -r fddaq-v5.2.2 -p Temp
 ## please note that the specification of base and release at this point might be the defaults 
 ## And it might not be necessary to specify them.
 rm -rf Temp 
 ```
-If test branches were created on the operation remote repository, those should be deleted.
+With `-p`, nothing is pushed unless the generation succeeded for all the apparati. 
+
+If test branches were created on the operation remote repositories, those should be deleted:
+```bash
+cpm-purge -a all -r mroda-test Temp
+rm -rf Temp
+```
 

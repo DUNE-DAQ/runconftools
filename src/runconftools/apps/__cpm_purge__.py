@@ -25,9 +25,9 @@ from runconftools.apps._common import (
 )
 @operation_url_option()
 @click.option("-r", "--release", type=click.STRING, default =None,
-              help="Operation branch prefix for the branches to be deleted")
+              help="Operation branch prefix for the branches to be deleted. If not given, nothing is deleted")
 @click.option("--conf", type=click.STRING, default=".*",
-              help="Regex to select a subset of branches")
+              help="Regex to select a subset of branches, matched from the start of the configuration name (end it with '$' to match the whole name)")
 
 @click.option(
     "--debug",
