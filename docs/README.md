@@ -74,6 +74,8 @@ If `SPACK_RELEASE` is not set or is not a stable release (e.g. a nightly), they 
 To avoid pushing `develop` by accident, when `SPACK_RELEASE` is not set `cpm-update` requires `-b` and `-r` to be given explicitly in order to push. 
 The base and release in use are always printed.
 
+As the configuration branches are named `<release>/<configuration_key>`, a release cannot contain `/`, cannot start with `-` and must be valid in a git branch name. 
+
 ### Checks before starting
 Before anything is cloned or changed, all the scripts check that:
  - the base and the operation repositories can be reached (which also checks your credentials) and that each operation repository has a default branch;
@@ -144,12 +146,17 @@ Options:
 For each apparatus, `PATH/<apparatus>` has to be either empty or a valid `ehn1-daqconfigs` repository. 
 If the directory contains a local repository, local changes may be lost so please push all changes that are important before calling `cpm-setup` on a non-empty directory.
 
+As for `cpm-update`, the base must exist and define each selected apparatus. 
+
 This script sets up a git repository per apparatus and prints, for each of them: 
  - The list of available branches in the base, without any filtering;
  - The list of available releases in operation;
  - The list of available generators in the selected base;
  - The list of configurations in the operation repository for the selected release;
  - The list of verifiers called once a configuration is generated.
+
+With `-c`, the configuration is checked out in the repository of each apparatus. 
+If it does not exist for some apparati an error is printed, and if it does not exist for any of them the script exits with an error.
 
 ### cpm-update
 This is the script that takes a base branch and propagates the changes to the operation repositories, creating the necessary configurations. 
@@ -214,7 +221,10 @@ Use `--conf "monitoring$"` to select only `monitoring`.
 If the regex matches no generator of an apparatus, that apparatus is skipped: it is neither generated, nor pushed, nor cleaned. 
 If it matches no generator at all, the script stops with an error.
 
+The generators use the software of the DAQ environment: when generating configurations for a stable release (e.g. `-r fddaq-v5.7.2`) from the environment of a different release, a warning is printed. 
+
 When generators are executed, so are the configuration verifiers. 
+If the base has no verifiers, the configurations cannot be verified and the generation fails. 
 If present, the configuration validator associated to the generator is also executed. 
 If a generator, a verifier or a validator fails, the generation is considered failed but the local branch is kept, which allows to investigate the issue. 
 The changes are committed to the local branch, also when the generator raised an exception (the commit message then ends with `[failed with an exception]`), so the working tree is clean for the next generator.
@@ -262,8 +272,8 @@ Options:
                         repeated or comma separated. Apparatuses without an
                         explicit URL use their default repo. A plain <url> is
                         accepted when a single apparatus is selected
-  -r, --release TEXT    Operation branch prefix for the branches to be
-                        deleted. If not given, nothing is deleted
+  -r, --release TEXT    Operation branch prefix for the branches to be deleted
+                        [required]
   --conf TEXT           Regex to select a subset of branches, matched from the
                         start of the configuration name (end it with '$' to
                         match the whole name)  [default: .*]
@@ -271,8 +281,9 @@ Options:
   --help                Show this message and exit.
 ```
 
-This removes the branches for the release specified with `-r`; if no release is given, nothing is removed.
+This removes the branches for the release specified with `-r`, which is mandatory.
 As for the update script, the configuration keys can be selected using a regex with the option `--conf`, which is matched from the start of the configuration name. 
+If nothing is removed from any of the selected apparati, e.g. because the release or the configurations do not exist, the script exits with an error. 
 For example, `cpm-purge -a all -r mroda-test Temp` removes all the `mroda-test` configurations from all the operation repositories.
 
 ## Python interface

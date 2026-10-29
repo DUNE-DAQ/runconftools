@@ -331,6 +331,16 @@ class ConfPool:
             return match.group(1)
         return default
 
+    @staticmethod
+    def is_stable_release(name: str) -> bool:
+        """
+        Check if a release name is the one of a stable DAQ release, e.g. ``fddaq-v5.7.2``.
+
+        Args:
+            name: release name, e.g. the prefix of the operation branches.
+        """
+        return re.match(r"^[^-/]+-v[0-9]+\.[0-9]+\.[0-9]+[^-/]*$", name) is not None
+
     def get_base_branches(self) -> list[str]:
         self.base.fetch()
         branches = [r.name for r in self.base.refs]
@@ -892,8 +902,10 @@ class ConfPool:
 
     def verify(self) -> bool :
         verifiers = self.get_verifiers()
+        ## every base has verifiers, finding none means that something is wrong
         if not verifiers :
-            logging.warning("No verfiers are available")
+            logging.error("No verifiers are available, the configuration cannot be verified")
+            return False
         for v in verifiers:
             module_name = "verifiers."+v
             module = self.import_function(module_name)

@@ -23,16 +23,22 @@ def remote_branches(url: Path) -> set[str]:
     return {line.split("refs/heads/")[1] for line in out.splitlines()}
 
 
-def push_base_branch(base: Path, work: Path, branch: str, generators: dict[str, dict[str, bool | str]]) -> None:
+def push_base_branch(base: Path, work: Path, branch: str, generators: dict[str, dict[str, bool | str]],
+                     verifiers: bool = True) -> None:
     """
     Push ``branch`` to ``base``, built in the new repo ``work``.
 
     ``generators[apparatus][name]`` is either the result of the default generator or the generator source.
+    If ``verifiers`` is True, the base has a verifier that always succeeds.
     """
     git("init", "-q", "-b", branch, str(work))
     (work / "README.md").write_text(branch)
     ## as in the real base, so that importing the generators leaves the working tree clean
     (work / ".gitignore").write_text("__pycache__/\n*.py[cod]\n")
+    if verifiers:
+        (work / "functions" / "verifiers").mkdir(parents=True)
+        (work / "functions" / "verifiers" / "__init__.py").write_text("")
+        (work / "functions" / "verifiers" / "always_ok.py").write_text("def verify(path: str) -> bool:\n    return True\n")
     for apparatus, gens in generators.items():
         d = work / "functions" / "generators" / apparatus
         d.mkdir(parents=True)

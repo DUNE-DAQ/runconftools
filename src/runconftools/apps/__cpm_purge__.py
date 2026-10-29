@@ -2,6 +2,7 @@
 
 import logging
 import re
+import sys
 
 import click
 
@@ -12,6 +13,7 @@ from runconftools.apps._common import (
     open_pools,
     operation_url_option,
     select_apparatuses,
+    validate_release,
 )
 
 
@@ -25,8 +27,8 @@ from runconftools.apps._common import (
     help="URL of the remote base repo"
 )
 @operation_url_option()
-@click.option("-r", "--release", type=click.STRING, default =None,
-              help="Operation branch prefix for the branches to be deleted. If not given, nothing is deleted")
+@click.option("-r", "--release", type=click.STRING, required=True, callback=validate_release,
+              help="Operation branch prefix for the branches to be deleted")
 @click.option("--conf", type=click.STRING, default=".*",
               help="Regex to select a subset of branches, matched from the start of the configuration name (end it with '$' to match the whole name)")
 
@@ -55,7 +57,16 @@ def main(path, apparatus, base_url, operation_url, release, conf, debug):
     check_repositories(operation_urls=operation_urls)
     pools = open_pools(path, operation_urls, base_url)
 
+    removed_any = False
     for name, pool in pools.items():
         log_apparatus(name)
         removed = pool.remove_configurations(release=release, conf_regex=re.compile(conf))
-        logging.info("Removed branches from %s: %s", name, ", ".join(removed))
+        if removed:
+            removed_any = True
+            logging.info("Removed branches from %s: %s", name, ", ".join(removed))
+        else:
+            logging.warning("Nothing removed from %s", name)
+
+    if not removed_any:
+        logging.error(f"No configuration of {release} matching '{conf}' was found, nothing is removed")
+        sys.exit(1)

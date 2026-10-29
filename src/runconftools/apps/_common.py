@@ -58,6 +58,25 @@ def parse_apparatuses(ctx: click.Context, param: click.Parameter, values: tuple[
     return names
 
 
+def validate_release(ctx: click.Context, param: click.Parameter, value: str | None) -> str | None:
+    """
+    Click callback checking that a release can be used as prefix of the configuration branches.
+
+    Returns:
+        The release, unchanged.
+    """
+    if value is None:
+        return value
+    ## branches are <release>/<configuration> and the release is parsed as the first path component
+    if "/" in value or value.startswith("-"):
+        raise click.BadParameter(f"'{value}' cannot contain '/' nor start with '-'", ctx=ctx, param=param)
+    status, _, _ = git.cmd.Git().check_ref_format(f"refs/heads/{value}/configuration",
+                                                   with_extended_output=True, with_exceptions=False)
+    if status != 0:
+        raise click.BadParameter(f"'{value}' is not valid in a git branch name", ctx=ctx, param=param)
+    return value
+
+
 def apparatus_option(all_help: str):
     """
     Return the click option selecting the apparatuses.

@@ -450,3 +450,66 @@ def test_crashing_generator_does_not_leak_into_other_configurations(tmp_path, re
     for branch in ("rel/gen_a", "rel/gen_c"):
         assert pool.is_verified(branch)
         assert "leftover.txt" not in git("ls-tree", "--name-only", branch, cwd=area)
+
+
+# ---------------------------------------------------------------- consistency checks
+
+
+def test_setup_rejects_missing_base_and_apparatus(tmp_path, remotes):
+    common = [str(tmp_path / "area"), "--base_url", str(remotes["base"]), *op_args(remotes, "np02", "np04")]
+    result = CliRunner().invoke(cpm_setup.main, [*common, "-a", "np02,np04", "-r", "nope"])
+    assert result.exit_code == 2
+    assert "nope is not among the available base branches" in result.output
+    result = CliRunner().invoke(cpm_setup.main, [*common, "-a", "np02,np04", "-r", "old"])
+    assert result.exit_code == 2
+    assert "np04 is not in base old" in result.output
+
+
+def test_setup_missing_configuration_fails(tmp_path, remotes):
+    common = [str(tmp_path / "area"), "-a", "np02", "--base_url", str(remotes["base"]), *op_args(remotes, "np02")]
+    assert run(cpm_update.main, [*common, "-b", "v1", "-r", "rel", "-p"]).exit_code == 0
+    assert run(cpm_setup.main, [*common, "-b", "v1", "-r", "rel", "-c", "missing"]).exit_code == 1
+    assert run(cpm_setup.main, [*common, "-b", "v1", "-r", "rel", "-c", "gen_a"]).exit_code == 0
+
+
+def test_purge_requires_release_and_fails_when_nothing_matches(tmp_path, remotes):
+    common = [str(tmp_path / "area"), "-a", "np02", "--base_url", str(remotes["base"]), *op_args(remotes, "np02")]
+    assert CliRunner().invoke(cpm_purge.main, common).exit_code == 2
+    assert run(cpm_update.main, [*common, "-b", "v1", "-r", "tmp", "-p"]).exit_code == 0
+    assert run(cpm_purge.main, [*common, "-r", "unknown"]).exit_code == 1
+    assert run(cpm_purge.main, [*common, "-r", "tmp", "--conf", "nothing"]).exit_code == 1
+    assert remote_branches(remotes["ops"]["np02"]) == {"main", "tmp/gen_a", "tmp/shared"}
+
+
+def test_missing_verifiers_fail_the_generation(tmp_path, remotes):
+    push_base_branch(remotes["base"], tmp_path / "remotes" / "base_nover", "nover", {"np02": {"gen_a": True}},
+                     verifiers=False)
+    result = run(cpm_update.main, update_args(tmp_path, remotes, "nover", "-p", apparatuses=("np02",)))
+    assert result.exit_code == 1
+    assert remote_branches(remotes["ops"]["np02"]) == {"main"}
+
+
+def test_is_stable_release():
+    assert ConfPool.is_stable_release("fddaq-v5.7.2")
+    assert ConfPool.is_stable_release("fddaq-v5.7.2rc1")
+    assert not ConfPool.is_stable_release("develop")
+    assert not ConfPool.is_stable_release("mroda-test")
+
+
+def test_release_mismatch_warns(tmp_path, remotes, monkeypatch, caplog):
+    monkeypatch.setenv("SPACK_RELEASE", "fddaq-v5.6.0-a9-1")
+    push_base_branch(remotes["base"], tmp_path / "remotes" / "base_stable", "fddaq-v5.7.2", {"np02": {"gen_a": True}})
+    args = [str(tmp_path / "area"), "-a", "np02", "--base_url", str(remotes["base"]), *op_args(remotes, "np02"),
+            "-b", "fddaq-v5.7.2", "-r", "fddaq-v5.7.2"]
+    assert run(cpm_update.main, args).exit_code == 0
+    assert "might not be compatible" in caplog.text
+
+
+@pytest.mark.parametrize("release", ["a/b", "-x", "bad name", "a..b", "x.lock"])
+def test_invalid_release_names(tmp_path, remotes, release):
+    args = [str(tmp_path / "area"), "-a", "np02", "--base_url", str(remotes["base"]), *op_args(remotes, "np02"),
+            "-b", "v1", "-r", release]
+    for main in (cpm_update.main, cpm_purge.main, cpm_setup.main):
+        result = CliRunner().invoke(main, args if main is not cpm_purge.main else [a for a in args if a not in ("-b", "v1")])
+        assert result.exit_code == 2, (main, release)
+        assert "Invalid value for '-r'" in result.output

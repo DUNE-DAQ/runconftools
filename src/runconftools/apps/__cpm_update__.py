@@ -17,6 +17,7 @@ from runconftools.apps._common import (
     open_pools,
     operation_url_option,
     select_apparatuses,
+    validate_release,
 )
 from runconftools.ConfPool import ConfPool
 
@@ -33,7 +34,7 @@ from runconftools.ConfPool import ConfPool
 @operation_url_option()
 @click.option("-b", "--base", type=click.STRING, default = ConfPool.get_release,
               help="Base branch to be used as a starting point. Defaults to the release from SPACK_RELEASE, or develop if it's not set or not a stable release")
-@click.option("-r", "--release", type=click.STRING, default = ConfPool.get_release,
+@click.option("-r", "--release", type=click.STRING, default = ConfPool.get_release, callback=validate_release,
               help="Operation branch prefix for the generated branches. Defaults to the release from SPACK_RELEASE, or develop if it's not set or not a stable release")
 @click.option("--conf", type=click.STRING, default=".*",
               help="Regex to select a subset of generators, matched from the start of the name (end it with '$' to match the whole name)")
@@ -71,6 +72,12 @@ def main(ctx, path, apparatus, base_url, operation_url, base, release, conf, pus
         if implicit:
             raise click.UsageError(f"SPACK_RELEASE is not set: {' and '.join(implicit)} must be given explicitly when pushing")
     logging.info(f"Base: {base}, release: {release}")
+
+    ## the generators use the software of the environment, which should match a stable release
+    environment = ConfPool.get_release(default="")
+    if not push_only and ConfPool.is_stable_release(release) and release != environment:
+        logging.warning(f"Generating configurations for {release} with the software of "
+                        f"{os.environ.get('SPACK_RELEASE') or 'no DAQ release'}, they might not be compatible")
 
     conf_regex = re.compile(conf)
 

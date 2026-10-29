@@ -3,16 +3,19 @@
 # @file cpm-setup is the executable used to interact with the ConfigPool class and setup a working environment
 import logging
 import re
+import sys
 
 import click
 
 from runconftools.apps._common import (
     apparatus_option,
+    check_apparatuses,
     check_repositories,
     log_apparatus,
     open_pools,
     operation_url_option,
     select_apparatuses,
+    validate_release,
 )
 from runconftools.ConfPool import ConfPool
 
@@ -27,7 +30,7 @@ from runconftools.ConfPool import ConfPool
     help="URL of the base repository"
 )
 @operation_url_option()
-@click.option("-r", "--release", type=click.STRING, default = ConfPool.get_release,
+@click.option("-r", "--release", type=click.STRING, default = ConfPool.get_release, callback=validate_release,
               help="Release whose configurations are listed. Defaults to the release from SPACK_RELEASE, or develop if it's not set or not a stable release")
 @click.option("-b", "--base", type=click.STRING, default = None, help="Base branch to inspect. If None, it's set equal to the release")
 @click.option("-c", "--conf", type=click.STRING, default=None, help="Configuration key to be checked out. If None, the base is checked out instead")
@@ -59,7 +62,9 @@ def main(path, apparatus, base_url, operation_url, release, base, conf, debug):
     operation_urls = select_apparatuses(path, base_url, base, apparatus, operation_url, ssh=False)
     check_repositories(operation_urls=operation_urls)
     pools = open_pools(path, operation_urls, base_url)
+    check_apparatuses(pools, base)
 
+    missing = []
     for name, pool in pools.items():
         log_apparatus(name)
 
@@ -82,5 +87,10 @@ def main(path, apparatus, base_url, operation_url, release, base, conf, debug):
         verifiers = pool.get_verifiers(base=base)
         logging.info("Available verifiers: {}".format(", ".join(verifiers)))
 
-        if conf:
-            pool.checkout_conf(release=release, conf=conf)
+        if conf and pool.checkout_conf(release=release, conf=conf) is None:
+            missing.append(name)
+
+    if missing:
+        logging.error(f"Configuration {conf} of {release} not found for: {', '.join(missing)}")
+        if len(missing) == len(pools):
+            sys.exit(1)
