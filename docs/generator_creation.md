@@ -78,7 +78,7 @@ The function must return `True` in case the configuration is found to be correct
 ## What happens after the generator
 When `cpm-update` runs a generator, it executes the following steps in the local repository of the apparatus:
  1. The local branch `<release>/<configuration_name>` is prepared: it starts from the base, or, if the configuration already exists, the existing branch is reset to the content of the base. 
- 2. The `generate` function is called. If it returns `False`, the changes are committed locally and the configuration is considered failed.
+ 2. The `generate` function is called. If it returns `False` or raises an exception, the changes are committed locally and the configuration is considered failed.
  3. The files listed by the function `irrelevant_files()` of `functions/common/<apparatus>/config_base.py`, if present, are removed. This is used to remove the sessions of other apparati.
  4. The verifiers are executed. 
  5. All the changes, including new files, are committed locally. 

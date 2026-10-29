@@ -31,6 +31,8 @@ def push_base_branch(base: Path, work: Path, branch: str, generators: dict[str, 
     """
     git("init", "-q", "-b", branch, str(work))
     (work / "README.md").write_text(branch)
+    ## as in the real base, so that importing the generators leaves the working tree clean
+    (work / ".gitignore").write_text("__pycache__/\n*.py[cod]\n")
     for apparatus, gens in generators.items():
         d = work / "functions" / "generators" / apparatus
         d.mkdir(parents=True)

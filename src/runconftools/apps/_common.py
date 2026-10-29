@@ -14,7 +14,7 @@ from pathlib import Path
 import click
 import git
 
-from runconftools.ConfPool import ConfPool
+from runconftools.ConfPool import ConfPool, repository_key
 
 ALL_APPARATUSES = "all"
 BASE_POOL_DIR = "_base"
@@ -127,6 +127,35 @@ def parse_operation_urls(values: Iterable[str], apparatuses: list[str] | None) -
     return urls
 
 
+def check_repositories(base_url: str | None = None, operation_urls: dict[str, str] | None = None) -> None:
+    """
+    Make sure that the repositories can be reached, before anything is cloned or changed.
+
+    The operation repositories must also have a default branch, which the pools rely on.
+
+    Args:
+        base_url: URL of the base repository, not checked if None.
+        operation_urls: mapping from apparatus to operation URL.
+
+    Raises:
+        click.ClickException: listing all the repositories that cannot be used.
+    """
+    operation_urls = operation_urls or {}
+    to_check = ([("base", base_url)] if base_url else []) + [(f"{a} operation", u) for a, u in operation_urls.items()]
+    problems = []
+    for label, url in to_check:
+        logging.debug("Checking the %s repository %s", label, url)
+        status, out, err = git.cmd.Git().ls_remote("--symref", url, "HEAD", with_extended_output=True, with_exceptions=False)
+        if status != 0:
+            reason = err.strip().splitlines()[-1] if err.strip() else f"exit code {status}"
+            problems.append(f"the {label} repository {url} cannot be reached: {reason}")
+        elif label != "base" and not any(line.startswith("ref:") for line in out.splitlines()):
+            problems.append(f"the {label} repository {url} has no default branch")
+
+    if problems:
+        raise click.ClickException("\n".join(["Cannot use the repositories:", *problems]))
+
+
 def base_pool(path: str, base_url: str) -> ConfPool:
     """
     Return a base-only pool in ``<path>/_base``, used to inspect the base.
@@ -182,9 +211,18 @@ def select_apparatuses(
     ## a plain URL is only unambiguous if the user explicitly asked for a single apparatus
     urls = parse_operation_urls(operation_values, apparatuses if explicit else None)
     try:
-        return ConfPool.set_apparatuses(apparatuses, urls, ssh=ssh)
+        operation_urls = ConfPool.set_apparatuses(apparatuses, urls, ssh=ssh)
     except ValueError as e:
         raise click.UsageError(str(e)) from None
+
+    for apparatus, url in operation_urls.items():
+        if repository_key(url) == repository_key(base_url):
+            raise click.UsageError(f"The base repository {base_url} cannot be the operation repository of {apparatus}")
+
+    logging.info("Operation repositories:")
+    for apparatus, url in operation_urls.items():
+        logging.info("  %s -> %s", apparatus, url)
+    return operation_urls
 
 
 def open_pools(path: str, operation_urls: dict[str, str], base_url: str) -> dict[str, ConfPool]:
@@ -198,6 +236,10 @@ def open_pools(path: str, operation_urls: dict[str, str], base_url: str) -> dict
 
     Returns:
         Mapping from apparatus to its pool, in the same order as ``operation_urls``.
+
+    Raises:
+        click.ClickException: if a local repository has uncommitted changes, e.g. left by a generator
+            that crashed, which could end up in the configurations.
     """
     root = Path(path)
     root.mkdir(parents=True, exist_ok=True)
@@ -206,6 +248,19 @@ def open_pools(path: str, operation_urls: dict[str, str], base_url: str) -> dict
         logging.warning("%s is a git repo: local repos are now created in %s/<apparatus>", root, root)
     except git.InvalidGitRepositoryError:
         pass
+
+    dirty = []
+    for apparatus in operation_urls:
+        try:
+            if git.Repo(root / apparatus).is_dirty(untracked_files=True):
+                dirty.append(str(root / apparatus))
+        except (git.InvalidGitRepositoryError, git.NoSuchPathError):
+            pass
+    if dirty:
+        raise click.ClickException(
+            "These local repos have uncommitted changes: " + ", ".join(dirty) + "\n"
+            "Inspect them with 'git status', then commit or discard the changes, or use a new PATH"
+        )
 
     pools = {}
     for apparatus, url in operation_urls.items():

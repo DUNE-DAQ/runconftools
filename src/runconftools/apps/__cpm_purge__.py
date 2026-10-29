@@ -7,6 +7,7 @@ import click
 
 from runconftools.apps._common import (
     apparatus_option,
+    check_repositories,
     log_apparatus,
     open_pools,
     operation_url_option,
@@ -48,8 +49,10 @@ def main(path, apparatus, base_url, operation_url, release, conf, debug):
         datefmt="%Y-%m-%d %H:%M:%S",
     )
 
+    check_repositories(base_url=base_url)
     ## there is no base here, so 'all' stands for the default apparatuses
     operation_urls = select_apparatuses(path, base_url, None, apparatus, operation_url, ssh=True)
+    check_repositories(operation_urls=operation_urls)
     pools = open_pools(path, operation_urls, base_url)
 
     for name, pool in pools.items():

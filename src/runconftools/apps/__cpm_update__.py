@@ -2,14 +2,17 @@
 
 # @file cpm-update is the executable used to interact with the ConfigPool class and propagate changes from a base branch to the relevant operation branches
 import logging
+import os
 import re
 import sys
 
 import click
+from click.core import ParameterSource
 
 from runconftools.apps._common import (
     apparatus_option,
     check_apparatuses,
+    check_repositories,
     log_apparatus,
     open_pools,
     operation_url_option,
@@ -47,7 +50,8 @@ from runconftools.ConfPool import ConfPool
     is_flag=True,
     help="Set debug print levels",
 )
-def main(path, apparatus, base_url, operation_url, base, release, conf, push_only, push, debug):
+@click.pass_context
+def main(ctx, path, apparatus, base_url, operation_url, base, release, conf, push_only, push, debug):
 
     """
     This script takes the base branch and propagates the changes to the operation repos, creating the necessary configurations.
@@ -61,10 +65,28 @@ def main(path, apparatus, base_url, operation_url, base, release, conf, push_onl
         datefmt="%Y-%m-%d %H:%M:%S",
     )
 
+    ## outside of a DAQ environment the defaults fall back to develop, which must not be pushed by accident
+    if (push or push_only) and not os.environ.get("SPACK_RELEASE"):
+        implicit = [f"--{p}" for p in ("base", "release") if ctx.get_parameter_source(p) == ParameterSource.DEFAULT]
+        if implicit:
+            raise click.UsageError(f"SPACK_RELEASE is not set: {' and '.join(implicit)} must be given explicitly when pushing")
+    logging.info(f"Base: {base}, release: {release}")
+
+    conf_regex = re.compile(conf)
+
+    check_repositories(base_url=base_url)
     operation_urls = select_apparatuses(path, base_url, base, apparatus, operation_url, ssh=True)
+    check_repositories(operation_urls=operation_urls)
     pools = open_pools(path, operation_urls, base_url)
     check_apparatuses(pools, base)
-    conf_regex = re.compile(conf)
+
+    ## a regex matching nothing is most likely a mistake, and apparatuses it does not concern are left untouched
+    for name, pool in list(pools.items()):
+        if not any(conf_regex.match(g) for g in pool.get_generators(base)):
+            logging.warning("No %s generator matches '%s', %s is skipped", name, conf, name)
+            del pools[name]
+    if not pools:
+        raise click.UsageError(f"No generator of the selected apparatuses matches '{conf}'")
 
     failed = []
     if not push_only :
@@ -80,17 +102,18 @@ def main(path, apparatus, base_url, operation_url, base, release, conf, push_onl
         sys.exit(1)
 
     if push or push_only :
-        ## only branches coming from a successful generation can be pushed, and they are
-        ## checked for all the apparatuses before pushing anything
-        unverified = {}
+        ## only branches coming from a successful generation and accepted by the operation repos
+        ## can be pushed, and they are checked for all the apparatuses before pushing anything
+        problems = {}
         for name, pool in pools.items():
-            branches = pool.get_unverified_configurations(base=base, release_tag=release, conf_regex=conf_regex)
-            if branches:
-                unverified[name] = branches
-        if unverified :
-            for name, branches in unverified.items():
-                logging.error("%s branches not coming from a successful generation: %s", name, ", ".join(branches))
-            logging.fatal("The push is not performed for any apparatus, regenerate the configurations first")
+            pool_problems = pool.check_push(base=base, release_tag=release, conf_regex=conf_regex)
+            if pool_problems:
+                problems[name] = pool_problems
+        if problems :
+            for name, pool_problems in problems.items():
+                for problem in pool_problems:
+                    logging.error("%s: %s", name, problem)
+            logging.fatal("The push is not performed for any apparatus")
             sys.exit(1)
 
         for name, pool in pools.items():

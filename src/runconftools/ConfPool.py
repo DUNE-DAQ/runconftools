@@ -12,6 +12,30 @@ import git
 from runconftools.Apparatus import Apparatus
 
 
+def repository_key(url: str) -> str:
+    """
+    Return a key identifying the repository of a git URL, independently of how the URL is written.
+
+    For example the ssh and https URLs of the same gitlab project have the same key.
+
+    Args:
+        url: git URL, i.e. ``<scheme>://[user@]host[:port]/path``, ``[user@]host:path`` or a local path.
+
+    Returns:
+        ``<host>/<path>`` for remote URLs, the absolute path for local ones, without a trailing ``.git``.
+    """
+    u = url.strip().rstrip("/").removesuffix(".git")
+    if u.lower().startswith("file://"):
+        return os.path.abspath(u[len("file://"):])
+    match = re.match(r"^[A-Za-z][A-Za-z0-9+.-]*://(?:[^@/]+@)?([^/:]+)(?::[0-9]*)?(/.*)?$", u)
+    if match:
+        return match.group(1).lower() + "/" + (match.group(2) or "").lstrip("/")
+    match = re.match(r"^(?:[^@/]+@)?([^/:]+):(?!//)(.*)$", u)
+    if match:
+        return match.group(1).lower() + "/" + match.group(2).lstrip("/")
+    return os.path.abspath(u)
+
+
 class FetchTimedRemote(git.Remote):
     '''
     HW: Wrapper around remote, times fetch calls and skips if called again in a fetch_time second window [defaults to 30s]
@@ -254,8 +278,9 @@ class ConfPool:
             Mapping from apparatus name to operation URL, following the order of ``apparatuses``.
 
         Raises:
-            ValueError: if ``operation_urls`` contains an apparatus that is not selected, or if an
-                apparatus has neither an explicit nor a default URL.
+            ValueError: if ``operation_urls`` contains an apparatus that is not selected, if an
+                apparatus has neither an explicit nor a default URL, or if two apparatuses have the
+                same operation repository.
         """
         selected = list(dict.fromkeys(apparatuses))
         operation_urls = dict(operation_urls or {})
@@ -275,6 +300,14 @@ class ConfPool:
             except ValueError:
                 raise ValueError(f"{a} has no default operation repository, its URL must be given") from None
             urls[a] = apparatus.ssh_url() if ssh else apparatus.https_url()
+
+        ## pushing two apparatuses to the same repository would mix their configurations
+        owners: dict[str, str] = {}
+        for a, url in urls.items():
+            key = repository_key(url)
+            if key in owners:
+                raise ValueError(f"{owners[key]} and {a} have the same operation repository {url}")
+            owners[key] = a
         return urls
 
     @staticmethod
@@ -560,6 +593,10 @@ class ConfPool:
         ## until this generation succeeds, the branch must not be pushed
         self._set_verified(ref_name, False)
 
+        ## leftovers in the working tree would end up in this configuration
+        if self.repo.is_dirty(untracked_files=True):
+            raise RuntimeError(f"The repo in {self.repo.working_dir} has uncommitted changes, {generator} is not generated")
+
         # prepare the branch
         if generator not in confs:
             logging.info(f"New configuration {generator} created from base {base}")
@@ -581,6 +618,44 @@ class ConfPool:
             logging.info(f"Restore from base {base}")
 
 
+        ## prepare the message for commit
+        message = f"Execute {generator} on {base}"
+        if log_message:
+            message += f": {log_message}"
+
+        try:
+            res = self._run_generator(apparatus, generator, message)
+        except Exception:
+            ## keep the partial result for debugging and leave a clean working tree for the next generation
+            try:
+                self.commit(f"{message} [failed with an exception]")
+            except Exception as e:
+                logging.error(f"Failed to commit the partial result of {generator}: {e}")
+            raise
+
+        if not res:
+            return res
+
+        self._set_verified(ref_name, True)
+
+        # push the branch
+        if not no_push :
+            operation.push(f"{ref_name}")
+
+        return res
+
+    def _run_generator(self, apparatus: str, generator: str, message: str) -> bool:
+        """
+        Run a generator, the verifiers and the validator on the checked out branch, committing the result.
+
+        Args:
+            apparatus: apparatus of the generator.
+            generator: name of the generator.
+            message: commit message.
+
+        Returns:
+            True if the generator, the verifiers and the validator all succeeded.
+        """
         # run the generator
         ## link the module
         module_name = "generators."+apparatus + "." + generator
@@ -591,15 +666,6 @@ class ConfPool:
 
         ## execute the function
         res = genctor(self.repo.working_dir)
-
-        ## prepare the message for commit
-        message = ""
-        if log_message:
-            message = f"Execute {generator} on {base}: {log_message}"
-        else:
-            message = f"Execute {generator} on {base}"
-
-
 
         ## we commmit even if the result is false because having the local result
         ## might be useful for debugging
@@ -629,12 +695,6 @@ class ConfPool:
                 return res
         else:
             logging.warning(f"{generator} has no validation")
-
-        self._set_verified(ref_name, True)
-
-        # push the branch
-        if not no_push :
-            operation.push(f"{ref_name}")
 
         return res
 
@@ -713,6 +773,39 @@ class ConfPool:
         branches = self.get_local_configurations(base, release_tag, conf_regex) or []
         return [b for b in branches if not self.is_verified(b)]
 
+    def check_push(self,
+                   base:str,
+                   release_tag:str|None = None,
+                   conf_regex: re.Pattern = re.compile(r".*") ) -> list[str] :
+        """
+        Check, without pushing, that ``push_configurations`` would succeed.
+
+        The branches must all be verified (see ``is_verified``) and must be accepted by the operation
+        repository, which is checked with a dry-run push: this detects unreachable repositories, missing
+        credentials and branches changed remotely in the meantime. Rules enforced by the server when
+        receiving a push, e.g. protected branches, are not checked.
+
+        See ``get_local_configurations`` for the arguments.
+
+        Returns:
+            The problems found, empty if the push can go ahead.
+        """
+        self._require_operation()
+        branches = self.get_local_configurations(base, release_tag, conf_regex)
+        if branches is None:
+            return [f"{base} is not among the available base branches"]
+
+        problems = [f"{b} does not come from a successful generation" for b in branches if not self.is_verified(b)]
+        if problems or not branches:
+            return problems
+
+        status, out, err = self.repo.git.push("--dry-run", "--porcelain", "operation", *branches,
+                                              with_extended_output=True, with_exceptions=False)
+        if status != 0:
+            rejected = [line.split("\t", 1)[1] for line in out.splitlines() if line.startswith("!")]
+            problems = [f"push rejected: {r}" for r in rejected] or [f"push failed: {err.strip().splitlines()[-1] if err.strip() else status}"]
+        return problems
+
     def push_configurations(self,
                             base:str,
                             release_tag:str|None = None,
@@ -766,16 +859,28 @@ class ConfPool:
         logging.debug("Available confs: " + ", ".join(confs))
         logging.debug("Available generators: " + ", ".join(generators))
 
+        ## without generators every configuration would look obsolete, which is surely a mistake
+        if not generators:
+            logging.error(f"Base {base} has no generators for {self.apparatus}, nothing is removed")
+            return []
+
         ## while removing we have to be careful to not remove the default branch
-        ret = []
+        branches = []
         for c in confs :
             if c in generators :
                 continue
-            
             branch = f"{release_tag}/{c}"
             if self.is_default_branch(branch) :
                 logging.debug(f"{branch} is not removed because it's the remote default")
                 continue
+            branches.append(branch)
+
+        if branches:
+            logging.warning(f"These {self.apparatus} configurations have no generator in base {base} "
+                            f"and are removed: {', '.join(branches)}")
+
+        ret = []
+        for branch in branches :
             try :
                 logging.info(f"Removing {branch} from {self.apparatus} operations")
                 operation.push(f":{branch}")

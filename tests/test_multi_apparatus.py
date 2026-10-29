@@ -322,3 +322,131 @@ def test_push_configurations_refuses_unverified(tmp_path, remotes):
     assert pool.is_verified("rel/gen_b") and pool.is_verified("rel/shared")
     assert pool.push_configurations("v1", release_tag="rel") is True
     assert remote_branches(remotes["ops"]["np04"]) == {"main", "rel/gen_b", "rel/shared"}
+
+
+# ---------------------------------------------------------------- safety checks
+
+
+CRASHING_GENERATOR = """
+from pathlib import Path
+
+def generate(path: str) -> bool:
+    Path(path, "leftover.txt").write_text("partial")
+    raise RuntimeError("boom")
+"""
+
+
+def test_repository_key():
+    from runconftools.ConfPool import repository_key
+    ssh = repository_key("ssh://git@gitlab.cern.ch:7999/dune-daq/online/np02-configs-operation.git")
+    assert ssh == repository_key("https://gitlab.cern.ch/dune-daq/online/np02-configs-operation.git")
+    assert ssh == repository_key("git@gitlab.cern.ch:dune-daq/online/np02-configs-operation")
+    assert ssh != repository_key("https://gitlab.cern.ch/dune-daq/online/np04-configs-operation.git")
+    assert repository_key("/a/b.git") == repository_key("file:///a/b") == "/a/b"
+
+
+def test_set_apparatuses_rejects_shared_repository():
+    with pytest.raises(ValueError, match="same operation repository"):
+        ConfPool.set_apparatuses(["np02", "np04"], {"np04": Apparatus.NP02.https_url()})
+
+
+def test_operation_repo_cannot_be_the_base(tmp_path, remotes):
+    args = [str(tmp_path / "area"), "-a", "np02", "--base_url", str(remotes["base"]),
+            "--operation_url", f"np02={remotes['base']}", "-b", "v1", "-r", "rel"]
+    result = CliRunner().invoke(cpm_update.main, args)
+    assert result.exit_code == 2
+    assert "cannot be the operation repository of np02" in result.output
+
+
+def test_unreachable_repositories_fail_before_cloning(tmp_path, remotes):
+    empty = tmp_path / "remotes" / "empty.git"
+    git("init", "-q", "--bare", str(empty))
+    args = [str(tmp_path / "area"), "-a", "np02,np04", "--base_url", str(remotes["base"]),
+            "--operation_url", f"np02={tmp_path / 'missing.git'},np04={empty}", "-b", "v1", "-r", "rel"]
+    result = CliRunner().invoke(cpm_update.main, args)
+    assert result.exit_code == 1
+    assert "np02 operation repository" in result.output and "cannot be reached" in result.output
+    assert "np04 operation repository" in result.output and "no default branch" in result.output
+    assert not (tmp_path / "area").exists()
+
+
+def test_pushing_without_spack_release_needs_explicit_base_and_release(tmp_path, remotes, monkeypatch):
+    monkeypatch.delenv("SPACK_RELEASE", raising=False)
+    args = [str(tmp_path / "area"), "-a", "np02", "--base_url", str(remotes["base"]), *op_args(remotes, "np02"), "-p"]
+    result = CliRunner().invoke(cpm_update.main, args)
+    assert result.exit_code == 2
+    assert "--base and --release must be given explicitly" in result.output
+    result = CliRunner().invoke(cpm_update.main, [*args, "-b", "v1"])
+    assert result.exit_code == 2
+    assert "--release must be given explicitly" in result.output
+
+
+def test_conf_matching_nothing(tmp_path, remotes):
+    result = CliRunner().invoke(cpm_update.main, update_args(tmp_path, remotes, "v1", "--conf", "nothing", "-p"))
+    assert result.exit_code == 2
+    assert "No generator of the selected apparatuses matches" in result.output
+
+
+def test_conf_skips_apparatuses_without_matches(tmp_path, remotes):
+    ## np04 has no gen_a: it is neither generated, pushed nor cleaned
+    assert run(cpm_update.main, update_args(tmp_path, remotes, "v1", "--conf", "gen_a", "-p")).exit_code == 0
+    assert remote_branches(remotes["ops"]["np02"]) == {"main", "rel/gen_a"}
+    assert remote_branches(remotes["ops"]["np04"]) == {"main"}
+    assert not (tmp_path / "area" / "np04").exists() or "rel/gen_b" not in git("branch", cwd=tmp_path / "area" / "np04")
+
+
+def test_clean_removes_configurations_without_generator(tmp_path, remotes):
+    assert run(cpm_update.main, update_args(tmp_path, remotes, "v1", "-p", apparatuses=("np02",))).exit_code == 0
+    ## the base "old" has no np02/shared
+    assert run(cpm_update.main, update_args(tmp_path, remotes, "old", "-p", apparatuses=("np02",))).exit_code == 0
+    assert remote_branches(remotes["ops"]["np02"]) == {"main", "rel/gen_a"}
+
+
+def test_clean_refuses_base_without_generators(tmp_path, remotes):
+    push_base_branch(remotes["base"], tmp_path / "remotes" / "base_empty", "empty", {"np02": {}})
+    assert run(cpm_update.main, update_args(tmp_path, remotes, "v1", "-p", apparatuses=("np02",))).exit_code == 0
+    pool = ConfPool(str(tmp_path / "area" / "np02"), apparatus="np02")
+    assert pool.clean("empty", release_tag="rel") == []
+    assert remote_branches(remotes["ops"]["np02"]) == {"main", "rel/gen_a", "rel/shared"}
+
+
+def test_push_is_checked_against_the_remote_before_pushing(tmp_path, remotes):
+    assert run(cpm_update.main, update_args(tmp_path, remotes, "v1")).exit_code == 0
+
+    ## someone else pushes rel/gen_a to np02 in the meantime
+    other = tmp_path / "other"
+    git("clone", "-q", str(remotes["ops"]["np02"]), str(other))
+    git("checkout", "-q", "-b", "rel/gen_a", cwd=other)
+    (other / "README.md").write_text("someone else")
+    git("commit", "-qam", "other", cwd=other)
+    git("push", "-q", "origin", "rel/gen_a", cwd=other)
+
+    result = run(cpm_update.main, update_args(tmp_path, remotes, "v1", "--push-only"))
+    assert result.exit_code == 1
+    assert remote_branches(remotes["ops"]["np02"]) == {"main", "rel/gen_a"}
+    assert git("show", "rel/gen_a:README.md", cwd=remotes["ops"]["np02"]) == "someone else"
+    assert remote_branches(remotes["ops"]["np04"]) == {"main"}
+
+
+def test_uncommitted_changes_are_refused(tmp_path, remotes):
+    assert run(cpm_update.main, update_args(tmp_path, remotes, "v1", apparatuses=("np02",))).exit_code == 0
+    (tmp_path / "area" / "np02" / "stray.txt").write_text("x")
+    result = CliRunner().invoke(cpm_update.main, update_args(tmp_path, remotes, "v1", apparatuses=("np02",)))
+    assert result.exit_code == 1
+    assert "uncommitted changes" in result.output
+
+
+def test_crashing_generator_does_not_leak_into_other_configurations(tmp_path, remotes):
+    push_base_branch(remotes["base"], tmp_path / "remotes" / "base_crash", "crash",
+                     {"np02": {"boom": CRASHING_GENERATOR, "gen_a": True, "gen_c": True}})
+    result = run(cpm_update.main, update_args(tmp_path, remotes, "crash", apparatuses=("np02",)))
+    assert result.exit_code == 1
+
+    area = tmp_path / "area" / "np02"
+    pool = ConfPool(str(area), apparatus="np02")
+    assert not pool.repo.is_dirty(untracked_files=True)
+    assert "[failed with an exception]" in git("log", "-1", "--format=%s", "rel/boom", cwd=area)
+    assert not pool.is_verified("rel/boom")
+    for branch in ("rel/gen_a", "rel/gen_c"):
+        assert pool.is_verified(branch)
+        assert "leftover.txt" not in git("ls-tree", "--name-only", branch, cwd=area)
