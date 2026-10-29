@@ -322,6 +322,7 @@ urls = ConfPool.set_apparatuses(apparati, {"np02": "ssh://..."}, ssh=True)
 ```
 Methods that need an operation repository raise a `RuntimeError` on a base-only pool. 
 `push_configurations` only pushes branches that come from a successful generation, see `is_verified` and `get_unverified_configurations`. 
+`ConfPool` is used directly by [runconf-ui](https://github.com/DUNE-DAQ/runconf-ui), the shifter interface: `tests/test_runconf_ui_contract.py` replays its calls, so keep it passing (or update runconf-ui together) when changing `ConfPool`. 
 The progress of `propagate_base` can be followed with its `listener` argument (see `GenerationListener`), and after a failed `generate_conf` the reason is in `last_failure`. 
 The generators, verifiers and common functions are always imported from the working tree of the pool calling them, so several pools and bases can be used in the same process.
 
