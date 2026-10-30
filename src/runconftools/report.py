@@ -6,6 +6,7 @@ Otherwise, e.g. when the output is redirected to a file, it is plain text with o
 line per log record, so that it can be read and searched with the usual tools.
 """
 
+import ctypes
 import logging
 import re
 import sys
@@ -36,6 +37,39 @@ DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
 
 ## how many warnings are listed in the summary, the others are only counted
 MAX_WARNINGS = 10
+
+try:
+    _LIBC = ctypes.CDLL(None)
+except OSError:
+    _LIBC = None
+
+
+def flush_stdout() -> None:
+    """
+    Write out what the generators printed so far, before the report prints anything.
+
+    The report goes to stderr, which is written immediately, while stdout is buffered when it is not
+    a terminal, e.g. in a log file: without this, the output of the generators would end up after the
+    lines reporting their result, and its last part even after the summary. Both the python buffer and
+    the C ones (used by the C++ libraries) are flushed.
+    """
+    try:
+        sys.stdout.flush()
+    except (AttributeError, OSError, ValueError):
+        pass
+    if _LIBC is not None:
+        try:
+            _LIBC.fflush(None)
+        except (AttributeError, OSError):
+            pass
+
+
+class _OrderedStreamHandler(logging.StreamHandler):
+    """Stream handler flushing stdout before each record, see ``flush_stdout``."""
+
+    def emit(self, record: logging.LogRecord) -> None:
+        flush_stdout()
+        super().emit(record)
 
 
 class Stop(Exception):
@@ -87,12 +121,14 @@ class ItemProgress:
 
     def start(self, label: str) -> None:
         """Announce that the item ``label`` is being processed."""
+        flush_stdout()
         self.progress.update(self.task, description=label)
         if not self.report.console.is_terminal:
             self.report.console.print(Text(f"  … {self._counter(self.done + 1)} {label}"), soft_wrap=True)
 
     def finish(self, label: str, success: bool, reason: str | None = None) -> None:
         """Record the result of the item ``label``."""
+        flush_stdout()
         self.done += 1
         self.progress.advance(self.task)
         line = Text("  ")
@@ -173,7 +209,7 @@ class Report:
             output: logging.Handler = RichHandler(console=self.console, show_path=False, markup=False,
                                                   rich_tracebacks=True, log_time_format="%H:%M:%S")
         else:
-            output = logging.StreamHandler(sys.stderr)
+            output = _OrderedStreamHandler(sys.stderr)
             output.setFormatter(logging.Formatter(LOG_FORMAT, DATE_FORMAT))
         self._handlers = [output, _Collector(self)]
         for handler in self._handlers:
@@ -185,6 +221,7 @@ class Report:
     def __exit__(self, exc_type, exc, tb) -> bool:
         exit_code = 0
         hint = None
+        flush_stdout()
         try:
             if exc_type is None:
                 pass
@@ -238,6 +275,7 @@ class Report:
         """Start the step ``name``, which must be one of the steps given at construction."""
         self.current_step = self.steps.index(name) + 1
         self.current_apparatus = None
+        flush_stdout()
         self.console.print()
         self.console.print(Rule(Text(f" Step {self.current_step}/{len(self.steps)} · {name} ", style="bold cyan"),
                                 style="cyan", align="left"))
@@ -270,6 +308,7 @@ class Report:
 
     def info(self, message: str) -> None:
         """Print an informative line."""
+        flush_stdout()
         self.console.print(Text(f"  {message}"), soft_wrap=True)
 
     def ok(self, message: str) -> None:
@@ -288,6 +327,7 @@ class Report:
 
     def table(self, title: str, columns: list[str], rows: list[list[str]]) -> None:
         """Print a table."""
+        flush_stdout()
         table = Table(title=title, title_justify="left", title_style="bold", box=box.SIMPLE_HEAD, show_edge=False)
         for column in columns:
             table.add_column(column, overflow="fold")
@@ -323,6 +363,7 @@ class Report:
     # ------------------------------------------------------------------ internals
 
     def _line(self, icon: str, message: str, style: str) -> None:
+        flush_stdout()
         line = Text("  ")
         line.append(f"{icon} ", style=f"bold {style}")
         line.append(message, style=style if style != "green" else "")
@@ -343,6 +384,7 @@ class Report:
                                  border_style="cyan", expand=False))
 
     def _summary(self, exit_code: int, hint: str | None) -> None:
+        flush_stdout()
         console = self.console
         console.print()
         console.print(Rule(Text(" Summary ", style="bold"), style="bold"))

@@ -561,3 +561,42 @@ def test_report_hint_on_unreachable_repository(tmp_path, remotes):
     assert result.exit_code == 1
     assert "fatal:" in result.output
     assert "→ Check the URLs and your access" in result.output
+
+
+NOISY_GENERATOR = """
+import ctypes
+
+def generate(path: str) -> bool:
+    for i in range(2000):
+        print(f"python output {{NAME}} {i}")
+    libc = ctypes.CDLL(None)
+    for i in range(500):
+        libc.printf(b"c output {{NAME}} %d\\\\n", i)
+    return True
+"""
+
+
+def test_report_keeps_output_order_in_log_files(tmp_path, remotes):
+    ## as in a log file: stdout is buffered, stdout and stderr go to the same file
+    import subprocess
+    import sys
+
+    gens = {name: NOISY_GENERATOR.replace("{{NAME}}", name) for name in ("noisy_a", "noisy_b")}
+    push_base_branch(remotes["base"], tmp_path / "remotes" / "base_noisy", "noisy", {"np02": gens})
+    log = tmp_path / "run.log"
+    with log.open("w") as f:
+        result = subprocess.run(
+            [sys.executable, "-c", "from runconftools.apps.__cpm_update__ import main; main()",
+             *update_args(tmp_path, remotes, "noisy", apparatuses=("np02",))],
+            stdout=f, stderr=subprocess.STDOUT, check=False,
+        )
+    lines = log.read_text().splitlines()
+    assert result.returncode == 0, "\n".join(lines[-40:])
+
+    summary = next(i for i, line in enumerate(lines) if "Summary" in line)
+    for name in ("noisy_a", "noisy_b"):
+        result_line = next(i for i, line in enumerate(lines) if "✔" in line and f"np02 · {name}" in line)
+        last_output = max(i for i, line in enumerate(lines) if line.endswith(f"output {name} 1999")
+                          or line.endswith(f"output {name} 499"))
+        assert last_output < result_line < summary
+    assert all("output noisy" not in line for line in lines[summary:])
