@@ -393,7 +393,7 @@ class Report:
     def table(self, title: str, columns: list[str], rows: list[list[str]]) -> None:
         """Print a table."""
         flush_stdout()
-        table = Table(title=title, title_justify="left", title_style="bold", box=box.SIMPLE_HEAD, show_edge=False)
+        table = Table(title=title, title_justify="left", title_style="bold", box=box.ROUNDED, header_style="bold")
         for column in columns:
             table.add_column(column, overflow="fold")
         for row in rows:
