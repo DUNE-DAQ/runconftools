@@ -15,7 +15,7 @@ import click
 import git
 
 from runconftools.ConfPool import ConfPool, repository_key
-from runconftools.report import ItemProgress, Report, Stop
+from runconftools.report import ItemProgress, OutputCapture, Report, Stop
 
 ALL_APPARATUSES = "all"
 BASE_POOL_DIR = "_base"
@@ -326,26 +326,40 @@ def check_apparatuses(pools: dict[str, ConfPool], base: str) -> None:
 class GenerationReporter:
     """Reports the generators run by ``ConfPool.propagate_base`` for one apparatus, see ``GenerationListener``."""
 
-    def __init__(self, report: Report, progress: ItemProgress, apparatus: str) -> None:
+    def __init__(self, report: Report, progress: ItemProgress, apparatus: str,
+                 capture: OutputCapture | None = None, logs: Path | None = None) -> None:
         """
         Args:
             report: report of the run, where the failures are recorded.
             progress: progress of all the generators of the run.
             apparatus: apparatus whose generators are run.
+            capture: if given, the output of each generator is sent to ``<logs>/<generator>.log``
+                instead of the terminal.
+            logs: directory of the output files, required with ``capture``.
         """
         self.report = report
         self.progress = progress
         self.apparatus = apparatus
+        self.capture = capture
+        self.logs = logs
         self.succeeded: list[str] = []
         self.failed: list[str] = []
 
+    def _log(self, generator: str) -> Path | None:
+        return self.logs / f"{generator}.log" if self.capture and self.logs else None
+
     def started(self, generator: str) -> None:
         self.progress.start(f"{self.apparatus} · {generator}")
+        log = self._log(generator)
+        if log is not None:
+            self.capture.start(log)
 
     def finished(self, generator: str, success: bool, reason: str | None) -> None:
+        if self.capture:
+            self.capture.stop()
         self.progress.finish(f"{self.apparatus} · {generator}", success, reason)
         if success:
             self.succeeded.append(generator)
         else:
             self.failed.append(generator)
-            self.report.add_failure(self.apparatus, generator, reason or "failed")
+            self.report.add_failure(self.apparatus, generator, reason or "failed", log=self._log(generator))

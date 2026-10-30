@@ -88,6 +88,10 @@ All the scripts report what they do in the same way:
 
 On a terminal the output is coloured. When it is redirected, e.g. to a file, it is plain text and every log line has a timestamp, so it can be searched with the usual tools. 
 The colours can also be disabled with the `NO_COLOR` environment variable. 
+
+The generators and the verifiers print a lot. With `cpm-update -q` (`--quiet`) their output is not printed but saved in `PATH/_logs/<apparatus>/<generator>.log`, overwritten at every run, 
+so that only the steps, the result of each configuration and the errors are printed, while the warnings are listed in the summary. 
+If a configuration fails, the summary shows its log file and its last lines. 
 The details of the git operations and of the generators are printed with `--debug`.
 
 The exit code is `0` on success, `1` when the script stops because of a failure, `2` for wrong options and `130` when interrupted.
@@ -214,6 +218,11 @@ Options:
                         of them come from a successful generation
   -p, --push            Pushes the branches, otherwise they are only created
                         locally
+  -q, --quiet           Do not print the output of the generators and
+                        verifiers, save it in
+                        PATH/_logs/<apparatus>/<generator>.log instead. Only
+                        the steps, the results and the errors are printed, the
+                        warnings are in the summary
   --debug               Set debug print levels
   --help                Show this message and exit.
 ```

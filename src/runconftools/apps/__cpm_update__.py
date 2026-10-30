@@ -3,6 +3,7 @@
 # @file cpm-update is the executable used to interact with the ConfigPool class and propagate changes from a base branch to the relevant operation branches
 import os
 import re
+from pathlib import Path
 
 import click
 from click.core import ParameterSource
@@ -18,7 +19,10 @@ from runconftools.apps._common import (
     validate_release,
 )
 from runconftools.ConfPool import ConfPool
-from runconftools.report import Report, Stop
+from runconftools.report import OutputCapture, Report, Stop
+
+## directory of PATH where the output of the generators is saved in quiet mode
+LOGS_DIR = "_logs"
 
 
 @click.command(context_settings={'show_default': True})
@@ -43,6 +47,9 @@ from runconftools.report import Report, Stop
 @click.option("-p", "--push", type=click.BOOL, default=False, is_flag=True,
               help="Pushes the branches, otherwise they are only created locally")
 
+@click.option("-q", "--quiet", type=click.BOOL, default=False, is_flag=True,
+              help=f"Do not print the output of the generators and verifiers, save it in PATH/{LOGS_DIR}/<apparatus>/<generator>.log instead. "
+                   "Only the steps, the results and the errors are printed, the warnings are in the summary")
 @click.option(
     "--debug",
     type=click.BOOL,
@@ -51,7 +58,7 @@ from runconftools.report import Report, Stop
     help="Set debug print levels",
 )
 @click.pass_context
-def main(ctx, path, apparatus, base_url, operation_url, base, release, conf, push_only, push, debug):
+def main(ctx, path, apparatus, base_url, operation_url, base, release, conf, push_only, push, quiet, debug):
 
     """
     This script takes the base branch and propagates the changes to the operation repos, creating the necessary configurations.
@@ -75,8 +82,11 @@ def main(ctx, path, apparatus, base_url, operation_url, base, release, conf, pus
         "Mode": mode,
         "Environment": os.environ.get("SPACK_RELEASE") or "SPACK_RELEASE not set",
     }
+    logs = Path(path) / LOGS_DIR
+    if quiet:
+        context["Output"] = f"quiet, generator output in {logs}"
 
-    with Report("cpm-update", steps, context=context, debug=debug) as report:
+    with Report("cpm-update", steps, context=context, debug=debug, quiet=quiet) as report:
         report.columns = ["Selected", "Generated", "Pushed", "Removed", "Result"]
         report.step("Checking options and repositories")
 
@@ -125,14 +135,22 @@ def main(ctx, path, apparatus, base_url, operation_url, base, release, conf, pus
             report.step("Generating configurations")
             report.group_warnings(r"(?P<item>\S+) has no validation", "Generators without validation")
             total = sum(len(g) for g in selected.values())
+            capture = OutputCapture() if quiet else None
             with report.progress(total) as progress:
                 listeners = {}
-                for name, pool in pools.items():
-                    report.current_apparatus = name
-                    listeners[name] = GenerationReporter(report, progress, name)
-                    pool.propagate_base(base=base, release_tag=release, conf_regex=conf_regex, no_push=True,
-                                        listener=listeners[name])
+                try:
+                    for name, pool in pools.items():
+                        report.current_apparatus = name
+                        listeners[name] = GenerationReporter(report, progress, name, capture=capture, logs=logs / name)
+                        pool.propagate_base(base=base, release_tag=release, conf_regex=conf_regex, no_push=True,
+                                            listener=listeners[name])
+                finally:
+                    ## never leave stdout redirected, e.g. when interrupted in the middle of a generator
+                    if capture:
+                        capture.stop()
                 report.current_apparatus = None
+            if quiet:
+                report.notes.append(f"The output of the generators is in {logs}/<apparatus>/<generator>.log.")
 
             failed = 0
             for name, listener in listeners.items():

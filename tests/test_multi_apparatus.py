@@ -571,7 +571,7 @@ def generate(path: str) -> bool:
         print(f"python output {{NAME}} {i}")
     libc = ctypes.CDLL(None)
     for i in range(500):
-        libc.printf(b"c output {{NAME}} %d\\\\n", i)
+        libc.printf(b"c output {{NAME}} %d\\n", i)
     return True
 """
 
@@ -600,3 +600,54 @@ def test_report_keeps_output_order_in_log_files(tmp_path, remotes):
                           or line.endswith(f"output {name} 499"))
         assert last_output < result_line < summary
     assert all("output noisy" not in line for line in lines[summary:])
+
+
+def test_quiet_saves_generator_output_in_logs(tmp_path, remotes):
+    import sys
+
+    failing = NOISY_GENERATOR.replace("{{NAME}}", "noisy_bad").replace("return True", "return False")
+    gens = {"noisy_a": NOISY_GENERATOR.replace("{{NAME}}", "noisy_a"), "noisy_bad": failing}
+    push_base_branch(remotes["base"], tmp_path / "remotes" / "base_quiet", "quiet", {"np02": gens})
+    stdout = sys.stdout
+    result = run(cpm_update.main, update_args(tmp_path, remotes, "quiet", "-q", apparatuses=("np02",)))
+    assert sys.stdout is stdout
+    assert result.exit_code == 1
+    out = result.output
+    running = out.split("Summary")[0]
+    assert "output noisy" not in running
+    assert "noisy_a has no validation" not in running
+    ## the generators run in directory order
+    lines = out.splitlines()
+    assert any(line.lstrip().startswith("✔ [") and line.endswith("np02 · noisy_a") for line in lines)
+    assert any(line.lstrip().startswith("✘ [") and line.endswith("np02 · noisy_bad — generate() returned False")
+               for line in lines)
+
+    logs = tmp_path / "area" / "_logs" / "np02"
+    good = (logs / "noisy_a.log").read_text().splitlines()
+    assert sum(line.startswith("python output noisy_a") for line in good) == 2000
+    assert sum(line.startswith("c output noisy_a") for line in good) == 500
+    assert f"output: {logs / 'noisy_bad.log'}" in out
+    assert "│ c output noisy_bad 499" in out
+    assert "The output of the generators is in" in out
+
+
+def test_quiet_log_file_has_no_generator_output(tmp_path, remotes):
+    import subprocess
+    import sys
+
+    gens = {name: NOISY_GENERATOR.replace("{{NAME}}", name) for name in ("noisy_a", "noisy_b")}
+    push_base_branch(remotes["base"], tmp_path / "remotes" / "base_noisy", "noisy", {"np02": gens})
+    log = tmp_path / "run.log"
+    with log.open("w") as f:
+        result = subprocess.run(
+            [sys.executable, "-c", "from runconftools.apps.__cpm_update__ import main; main()",
+             *update_args(tmp_path, remotes, "noisy", "--quiet", apparatuses=("np02",))],
+            stdout=f, stderr=subprocess.STDOUT, check=False,
+        )
+    text = log.read_text()
+    assert result.returncode == 0, text[-3000:]
+    assert "output noisy" not in text
+    for name in ("noisy_a", "noisy_b"):
+        assert any(line.lstrip().startswith("✔ [") and line.endswith(f"np02 · {name}") for line in text.splitlines())
+    assert "✔ SUCCESS" in text
+    assert len((tmp_path / "area" / "_logs" / "np02" / "noisy_b.log").read_text().splitlines()) == 2500

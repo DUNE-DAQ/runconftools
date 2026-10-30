@@ -8,13 +8,15 @@ line per log record, so that it can be read and searched with the usual tools.
 
 import ctypes
 import logging
+import os
 import re
 import sys
 import time
 import traceback
 from collections.abc import Iterator
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from pathlib import Path
 
 import click
 from rich import box
@@ -37,6 +39,8 @@ DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
 
 ## how many warnings are listed in the summary, the others are only counted
 MAX_WARNINGS = 10
+## how many lines of the output of a failed item are shown in the summary
+TAIL_LINES = 10
 
 try:
     _LIBC = ctypes.CDLL(None)
@@ -70,6 +74,62 @@ class _OrderedStreamHandler(logging.StreamHandler):
     def emit(self, record: logging.LogRecord) -> None:
         flush_stdout()
         super().emit(record)
+
+
+class OutputCapture:
+    """
+    Send what is printed to stdout to a file, e.g. the output of a generator in quiet mode.
+
+    Both ``sys.stdout`` and the stdout file descriptor are redirected, so that the output of the
+    C++ libraries is captured too. The report itself prints to stderr and is not affected.
+    """
+
+    def __init__(self) -> None:
+        self._file = None
+        self._saved_stdout = None
+        self._saved_fd: int | None = None
+        self._fd: int | None = None
+
+    def start(self, path: Path) -> None:
+        """Start sending stdout to ``path``, which is overwritten."""
+        self.stop()
+        flush_stdout()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        self._file = open(path, "w", buffering=1)
+        try:
+            self._fd = sys.__stdout__.fileno()
+            self._saved_fd = os.dup(self._fd)
+            os.dup2(self._file.fileno(), self._fd)
+        except (AttributeError, OSError, ValueError):
+            ## no real stdout, e.g. in some test runners: only the python output is captured
+            self._fd = self._saved_fd = None
+        self._saved_stdout = sys.stdout
+        sys.stdout = self._file
+
+    def stop(self) -> None:
+        """Restore stdout, if it is captured."""
+        if self._file is None:
+            return
+        flush_stdout()
+        sys.stdout = self._saved_stdout
+        if self._saved_fd is not None:
+            os.dup2(self._saved_fd, self._fd)
+            os.close(self._saved_fd)
+        self._file.close()
+        self._file = None
+        self._saved_fd = self._fd = None
+
+
+@dataclass
+class Failure:
+    """An item, e.g. a configuration, that failed."""
+
+    apparatus: str
+    item: str
+    reason: str
+    ## file with the output of the item and its last lines, in quiet mode
+    log: Path | None = None
+    tail: list[str] = field(default_factory=list)
 
 
 class Stop(Exception):
@@ -162,18 +222,21 @@ class Report:
             raise Stop("something is wrong", hint="fix it")
     """
 
-    def __init__(self, title: str, steps: list[str], context: dict[str, str] | None = None, debug: bool = False) -> None:
+    def __init__(self, title: str, steps: list[str], context: dict[str, str] | None = None, debug: bool = False,
+                 quiet: bool = False) -> None:
         """
         Args:
             title: name of the script.
             steps: names of all the steps that will be executed, in order.
             context: parameters of the run shown in the header, e.g. the base and the release.
             debug: whether the debug messages are printed.
+            quiet: if True only the errors are logged while running, the warnings are only in the summary.
         """
         self.title = title
         self.steps = steps
         self.context = context or {}
         self.debug = debug
+        self.quiet = quiet
         self.console = Console(stderr=True, highlight=False)
 
         self.current_step = 0
@@ -183,8 +246,8 @@ class Report:
         ## summary table: one row per apparatus, in the order of the columns
         self.columns: list[str] = []
         self.rows: dict[str, dict[str, str]] = {}
-        ## configurations that failed: (apparatus, configuration, reason)
-        self.failures: list[tuple[str, str, str]] = []
+        ## items, e.g. configurations, that failed
+        self.failures: list[Failure] = []
         ## steps in which the failures were recorded: their errors are already explained by the failures
         self._failure_steps: set[int] = set()
         ## warnings collapsed in the summary: (regex with an 'item' group, title)
@@ -211,6 +274,8 @@ class Report:
         else:
             output = _OrderedStreamHandler(sys.stderr)
             output.setFormatter(logging.Formatter(LOG_FORMAT, DATE_FORMAT))
+        if self.quiet and not self.debug:
+            output.setLevel(logging.ERROR)
         self._handlers = [output, _Collector(self)]
         for handler in self._handlers:
             root.addHandler(handler)
@@ -335,13 +400,26 @@ class Report:
             table.add_row(*row)
         self.console.print(table)
 
-    def add_failure(self, apparatus: str, item: str, reason: str) -> None:
+    def add_failure(self, apparatus: str, item: str, reason: str, log: Path | None = None) -> None:
         """
         Record that ``item`` (e.g. a configuration) of ``apparatus`` failed, for the summary.
 
         The errors logged in the same step for an apparatus are then not repeated in the summary.
+
+        Args:
+            apparatus: apparatus of the item.
+            item: what failed.
+            reason: why it failed.
+            log: file with the output of the item, whose last lines are shown in the summary.
         """
-        self.failures.append((apparatus, item, reason))
+        tail = []
+        if log is not None:
+            try:
+                lines = [line.rstrip() for line in log.read_text(errors="replace").splitlines() if line.strip()]
+                tail = [line[:200] for line in lines[-TAIL_LINES:]]
+            except OSError:
+                pass
+        self.failures.append(Failure(apparatus, item, reason, log, tail))
         self._failure_steps.add(self.current_step)
 
     def group_warnings(self, pattern: str, title: str) -> None:
@@ -407,11 +485,15 @@ class Report:
 
         if self.failures:
             console.print(Text("Failed configurations", style="bold red"))
-            for apparatus, conf, reason in self.failures:
+            for failure in self.failures:
                 line = Text("  ✘ ", style="bold red")
-                line.append(f"{apparatus}/{conf}", style="red")
-                line.append(f" — {reason}")
+                line.append(f"{failure.apparatus}/{failure.item}", style="red")
+                line.append(f" — {failure.reason}")
                 console.print(line, soft_wrap=True)
+                if failure.log is not None:
+                    console.print(Text(f"    output: {failure.log}", style="dim"), soft_wrap=True)
+                for tail_line in failure.tail:
+                    console.print(Text(f"    │ {tail_line}", style="dim"), soft_wrap=True)
 
         errors = [p for p in self.problems if p.level >= logging.ERROR]
         ## the errors of a failed configuration are already summarised by its reason
