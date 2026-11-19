@@ -26,10 +26,10 @@ def remote_branches(url: Path) -> set[str]:
 def push_base_branch(base: Path, work: Path, branch: str, generators: dict[str, dict[str, bool | str]],
                      verifiers: bool = True) -> None:
     """
-    Push ``branch`` to ``base``, built in the new repo ``work``.
+    Push branch to base, built in the new repo work.
 
-    ``generators[apparatus][name]`` is either the result of the default generator or the generator source.
-    If ``verifiers`` is True, the base has a verifier that always succeeds.
+    generators[apparatus][name] is the result of the default generator, or the source of the generator.
+    With verifiers, the base has a verifier that always succeeds.
     """
     git("init", "-q", "-b", branch, str(work))
     (work / "README.md").write_text(branch)
@@ -75,9 +75,9 @@ def remotes(tmp_path):
     Bare base and operation repos.
 
     Base branches:
-     - ``v1``: np02 (gen_a, shared) and np04 (gen_b, shared)
-     - ``old``: np02 only
-     - ``broken``: like v1, but np04/gen_b fails
+     - v1: np02 (gen_a, shared) and np04 (gen_b, shared)
+     - old: np02 only
+     - broken: like v1, but np04/gen_b fails
     """
     base = tmp_path / "remotes" / "base.git"
     git("init", "-q", "--bare", str(base))

@@ -8,7 +8,7 @@ So, creating a configuration is equivalent to write the corresponding generator.
 
 ## Generator structure
 Generators are stored in the base repo, as they are specific for the base that they have to work upon in order to create the necessary configuration. 
-Specifically, they are stored in the `functions/generators` directory, in the subdirectory specific for the apparatus relevant for the generator, e.g. `functions/generators/np02`. 
+Specifically, they are stored in the `functions/generators` directory, in the subdirectory specific for the apparatus relevant for the generator, like `functions/generators/np02`. 
 
 These subdirectories define the apparati of the base: adding a new subdirectory adds a new apparatus, which is then also selected by `-a all`. 
 As the generators are imported as `generators.<apparatus>.<configuration_name>`, the subdirectory name must be a valid python name (no `-`) and the subdirectory should contain an `__init__.py` file, as the existing ones. 
@@ -60,7 +60,7 @@ In this way the changes made to the base by executing the generator can simply b
 ```bash
 (cd /path/to/base; git restore .)
 ```
-Note that `git restore` does not remove the new files that the generator might have created, check them with `git status`. 
+`git restore` does not remove the new files that the generator might have created, check them with `git status`. 
 Once the development is done and the result of the generator is tested, ideally with a successful run, the file can be added to the base git repository, committed, pushed to the remote base and the operation repository can be updated. 
 
 ## Validators

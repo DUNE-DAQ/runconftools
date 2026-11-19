@@ -1,9 +1,8 @@
 """
-Command line helpers shared by the ``cpm-*`` scripts to work on several apparatuses at once.
+Helpers shared by the cpm-* scripts.
 
-Every apparatus gets its own local repository in ``<PATH>/<apparatus>``, because the local
-branches (``<release>/<generator>``) of different apparatuses have the same names.
-When all the apparatuses of a base are requested, the base is inspected in ``<PATH>/_base``.
+Each apparatus has its local repository in PATH/<apparatus>, as the configuration branches of
+different apparatuses have the same names. With -a all, the base is inspected in PATH/_base.
 """
 
 import logging
@@ -24,26 +23,13 @@ _NAME_REGEX = re.compile(r"^[A-Za-z0-9_]+$")
 
 
 def split_values(values: Iterable[str]) -> list[str]:
-    """
-    Flatten option values that may contain comma separated lists.
-
-    Args:
-        values: raw values, e.g. ``("np02,np04", "vd_coldbox")``.
-
-    Returns:
-        The stripped, non-empty values without duplicates, in order of appearance.
-    """
+    """Split comma separated option values, dropping empty values and duplicates."""
     items = (v.strip() for value in values for v in value.split(","))
     return list(dict.fromkeys(v for v in items if v))
 
 
 def parse_apparatuses(ctx: click.Context, param: click.Parameter, values: tuple[str, ...]) -> list[str] | None:
-    """
-    Click callback for the apparatus option.
-
-    Returns:
-        The list of the requested apparatuses, or None if all the apparatuses are requested.
-    """
+    """Click callback of -a: the list of apparatuses, or None for all."""
     names = split_values(values)
     if not names:
         raise click.BadParameter("at least one apparatus is needed", ctx=ctx, param=param)
@@ -60,12 +46,7 @@ def parse_apparatuses(ctx: click.Context, param: click.Parameter, values: tuple[
 
 
 def validate_release(ctx: click.Context, param: click.Parameter, value: str | None) -> str | None:
-    """
-    Click callback checking that a release can be used as prefix of the configuration branches.
-
-    Returns:
-        The release, unchanged.
-    """
+    """Click callback of -r: the release must be usable as prefix of the branch names."""
     if value is None:
         return value
     ## branches are <release>/<configuration> and the release is parsed as the first path component
@@ -79,12 +60,7 @@ def validate_release(ctx: click.Context, param: click.Parameter, value: str | No
 
 
 def apparatus_option(all_help: str):
-    """
-    Return the click option selecting the apparatuses.
-
-    Args:
-        all_help: description of what ``all`` stands for in the specific script.
-    """
+    """The -a option. all_help says what 'all' means for the script."""
     return click.option(
         "-a", "--apparatus",
         type=click.STRING,
@@ -98,7 +74,7 @@ def apparatus_option(all_help: str):
 
 
 def operation_url_option():
-    """Return the click option overriding the operation repositories."""
+    """The --operation_url option."""
     return click.option(
         "--operation_url",
         type=click.STRING,
@@ -112,18 +88,9 @@ def operation_url_option():
 
 def parse_operation_urls(values: Iterable[str], apparatuses: list[str] | None) -> dict[str, str]:
     """
-    Parse the values of the operation URL option.
+    Parse --operation_url into {apparatus: url}.
 
-    Args:
-        values: raw option values, each one either ``<apparatus>=<url>`` or a plain ``<url>``.
-        apparatuses: the selected apparatuses. A plain URL is only accepted if there is exactly one.
-
-    Returns:
-        Mapping from apparatus to operation URL.
-
-    Raises:
-        click.BadParameter: if a plain URL cannot be associated to a single apparatus, or if an
-            apparatus is given two different URLs.
+    A URL without apparatus is only accepted when a single apparatus is selected.
     """
     urls: dict[str, str] = {}
     plain = []
@@ -149,16 +116,9 @@ def parse_operation_urls(values: Iterable[str], apparatuses: list[str] | None) -
 
 def check_repositories(base_url: str | None = None, operation_urls: dict[str, str] | None = None) -> None:
     """
-    Make sure that the repositories can be reached, before anything is cloned or changed.
+    Check that the repositories can be reached, and that the operation ones have a default branch.
 
-    The operation repositories must also have a default branch, which the pools rely on.
-
-    Args:
-        base_url: URL of the base repository, not checked if None.
-        operation_urls: mapping from apparatus to operation URL.
-
-    Raises:
-        Stop: listing all the repositories that cannot be used.
+    All the problems are listed in one Stop, before anything is cloned.
     """
     operation_urls = operation_urls or {}
     to_check = ([("base", base_url)] if base_url else []) + [(f"{a} operation", u) for a, u in operation_urls.items()]
@@ -177,13 +137,7 @@ def check_repositories(base_url: str | None = None, operation_urls: dict[str, st
 
 
 def base_pool(path: str, base_url: str) -> ConfPool:
-    """
-    Return a base-only pool in ``<path>/_base``, used to inspect the base.
-
-    Args:
-        path: root directory of the local repositories.
-        base_url: URL of the base repository.
-    """
+    """Base-only pool in PATH/_base, to inspect the base."""
     pool_path = Path(path) / BASE_POOL_DIR
     pool_path.mkdir(parents=True, exist_ok=True)
     return ConfPool(str(pool_path), apparatus=None, operation_url=None, base_url=base_url)
@@ -198,22 +152,9 @@ def select_apparatuses(
     ssh: bool,
 ) -> dict[str, str]:
     """
-    Resolve the requested apparatuses and their operation repositories.
+    Return {apparatus: operation URL} for the selected apparatuses.
 
-    Args:
-        path: root directory of the local repositories.
-        base_url: URL of the base repository.
-        base: base branch defining the apparatuses when all of them are requested. If None,
-            the default apparatuses are used instead.
-        apparatuses: the explicitly requested apparatuses, None if all are requested.
-        operation_values: raw values of the operation URL option.
-        ssh: whether the default operation URLs use ssh (True) or https (False).
-
-    Returns:
-        Mapping from apparatus to operation URL.
-
-    Raises:
-        click.UsageError: if no apparatus is found or an apparatus has no operation URL.
+    With -a all, the apparatuses come from the base, or are the defaults if there is no base.
     """
     explicit = apparatuses is not None
     if apparatuses is None:
@@ -246,19 +187,9 @@ def select_apparatuses(
 
 def open_pools(path: str, operation_urls: dict[str, str], base_url: str) -> dict[str, ConfPool]:
     """
-    Set up one pool per apparatus in ``<path>/<apparatus>``.
+    Open one pool per apparatus in PATH/<apparatus>.
 
-    Args:
-        path: root directory of the local repositories.
-        operation_urls: mapping from apparatus to operation URL, see ``select_apparatuses``.
-        base_url: URL of the base repository.
-
-    Returns:
-        Mapping from apparatus to its pool, in the same order as ``operation_urls``.
-
-    Raises:
-        Stop: if a local repository has uncommitted changes, e.g. left by a generator that crashed,
-            which could end up in the configurations.
+    Local repos with uncommitted changes stop the run, as the changes could end up in the configurations.
     """
     root = Path(path)
     root.mkdir(parents=True, exist_ok=True)
@@ -289,13 +220,9 @@ def open_pools(path: str, operation_urls: dict[str, str], base_url: str) -> dict
 
 def check_apparatuses(pools: dict[str, ConfPool], base: str) -> None:
     """
-    Make sure that every apparatus exists in the base.
+    Stop the run if the base does not exist or does not have one of the apparatuses.
 
-    This protects from cleaning the operation repo of an apparatus the base knows nothing about:
-    with no generators, every configuration of the release would be considered obsolete.
-
-    Raises:
-        click.UsageError: if the base does not exist or does not support an apparatus.
+    Otherwise clean would remove all the configurations of an apparatus missing in the base.
     """
     for apparatus, pool in pools.items():
         try:
@@ -309,19 +236,11 @@ def check_apparatuses(pools: dict[str, ConfPool], base: str) -> None:
 
 
 class GenerationReporter:
-    """Reports the generators run by ``ConfPool.propagate_base`` for one apparatus, see ``GenerationListener``."""
+    """Shows the generators run by propagate_base for one apparatus."""
 
     def __init__(self, report: Report, progress: ItemProgress, apparatus: str,
                  capture: OutputCapture | None = None, logs: Path | None = None) -> None:
-        """
-        Args:
-            report: report of the run, where the failures are recorded.
-            progress: progress of all the generators of the run.
-            apparatus: apparatus whose generators are run.
-            capture: if given, the output of each generator is sent to ``<logs>/<generator>.log``
-                instead of the terminal.
-            logs: directory of the output files, required with ``capture``.
-        """
+        """With capture, the output of each generator goes to <logs>/<generator>.log."""
         self.report = report
         self.progress = progress
         self.apparatus = apparatus

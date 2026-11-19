@@ -1,9 +1,8 @@
 """
-Contract with runconf-ui (https://github.com/DUNE-DAQ/runconf-ui), the shifter interface.
+Tests replaying the ConfPool calls of runconf-ui, the shifter interface.
 
-runconf-ui uses ConfPool directly, in src/runconf_ui/repo_manager/detail/remote_repo_manager.py
-and, on the mroda/repo_manager branch, emulation_repo_manager.py. These tests replay its calls,
-with the same positional arguments, so that a change of ConfPool breaking runconf-ui fails here.
+runconf-ui uses ConfPool in src/runconf_ui/repo_manager/detail/remote_repo_manager.py, and in
+emulation_repo_manager.py on the mroda/repo_manager branch: a change of ConfPool breaking it fails here.
 """
 
 import inspect
@@ -103,7 +102,7 @@ def test_emulation_repo_manager(tmp_path, repos, operation):
 
 
 def test_configurations_deleted_remotely_disappear(tmp_path, repos):
-    ## runconf-ui keeps its cache: a configuration removed elsewhere (e.g. purged) must not be listed anymore
+    ## runconf-ui keeps its cache: a configuration purged elsewhere must not be listed anymore
     conf_dir = tmp_path / "np02-runs"
     conf_dir.mkdir(parents=True, exist_ok=True)
     pool = ConfPool(str(conf_dir), "np02", repos["ops"], repos["base"])

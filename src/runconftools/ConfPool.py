@@ -15,15 +15,9 @@ from runconftools.Apparatus import Apparatus
 
 def repository_key(url: str) -> str:
     """
-    Return a key identifying the repository of a git URL, independently of how the URL is written.
+    Key identifying the repository of a git URL, the same for the ssh and https URLs of a project.
 
-    For example the ssh and https URLs of the same gitlab project have the same key.
-
-    Args:
-        url: git URL, i.e. ``<scheme>://[user@]host[:port]/path``, ``[user@]host:path`` or a local path.
-
-    Returns:
-        ``<host>/<path>`` for remote URLs, the absolute path for local ones, without a trailing ``.git``.
+    It is <host>/<path> for remote URLs and the absolute path for local ones, without the .git suffix.
     """
     u = url.strip().rstrip("/").removesuffix(".git")
     if u.lower().startswith("file://"):
@@ -41,18 +35,13 @@ def git_error(stderr: str, default: str = "unknown error") -> str:
     """
     Return the most useful line of the error output of git.
 
-    The message of the server (``remote:`` lines, e.g. gitlab's "The project you were looking for could
-    not be found ...") is preferred, as it is more specific than git's own ``fatal:`` or ``error:`` lines.
-
-    Args:
-        stderr: error output of a git command.
-        default: returned if the output is empty.
+    The message of the server (the remote: lines) is preferred, then the fatal: or error: line of git.
     """
     lines = [line.strip() for line in stderr.splitlines() if line.strip()]
     for line in lines:
         if line.startswith("remote:"):
             message = line.removeprefix("remote:").strip()
-            ## skip the empty and decoration lines around the message, e.g. "========"
+            ## skip the empty lines and the ===== lines around the message
             if message and any(c.isalnum() for c in message):
                 return message
     for line in lines:
@@ -62,13 +51,13 @@ def git_error(stderr: str, default: str = "unknown error") -> str:
 
 
 class GenerationListener(Protocol):
-    """Receives the progress of ``ConfPool.propagate_base``, e.g. to display it."""
+    """Notified by propagate_base before and after each generator."""
 
     def started(self, generator: str) -> None:
-        """Called before running ``generator``."""
+        """Called before running the generator."""
 
     def finished(self, generator: str, success: bool, reason: str | None) -> None:
-        """Called after running ``generator``, with the reason of the failure if it failed."""
+        """Called after running the generator, with the reason if it failed."""
 
 
 class FetchTimedRemote(git.Remote):
@@ -82,10 +71,9 @@ class FetchTimedRemote(git.Remote):
 
     def fetch(self, *args, **kwargs):
         """
-        Fetch the remote, unless it was fetched less than ``fetch_timeout`` seconds ago.
+        Fetch, unless it was done less than fetch_timeout seconds ago.
 
-        The remote-tracking branches deleted on the remote are pruned by default, so that branches
-        removed elsewhere, e.g. by cpm-purge or on gitlab, are not listed anymore.
+        The branches deleted on the remote are pruned by default.
         """
         kwargs.setdefault("prune", True)
         current_fetch_time = perf_counter()
@@ -109,12 +97,9 @@ class ConfPool:
     """
     Local repository linking the base repository to the operation repository of one apparatus.
 
-    The pool can also be base-only, i.e. without an operation repository. In that case only the
-    methods that act on the base (e.g. ``get_base_branches``, ``checkout_base``, ``get_apparatuses``,
-    ``get_generators``, ``get_verifiers``) can be used, the others raise a ``RuntimeError``.
-
-    The modules of the base (generators, verifiers and common functions) are always imported from the
-    ``functions`` directory of the pool's own working tree, see ``import_function``.
+    Without operation repository the pool is base-only: only the methods working on the base can be used,
+    the others raise a RuntimeError.
+    The generators, verifiers and common functions are imported from the pool's own working tree, see import_function.
     """
 
     ## a local branch can be pushed only if it points to the commit recorded here, see is_verified
@@ -129,21 +114,13 @@ class ConfPool:
         fetch_timeout: float = 30.0
     ) -> None:
         """
-        Set up the local repository in ``path``, cloning the base if needed, and its remotes.
+        Set up the local repository in path, cloning the base if needed.
 
-        Args:
-            path: existing directory, either empty or containing a git repository.
-            apparatus: apparatus whose generators are used, i.e. ``functions/generators/<apparatus>``.
-                It can be None for a base-only pool.
-            operation_url: URL of the operation repository. If None, the existing ``operation`` remote
-                is used; if there is none, the pool is base-only.
-            base_url: URL of the base repository. Required if ``path`` has to be cloned or if the local
-                repository has no ``base`` remote.
-            fetch_timeout: time window in seconds in which repeated fetches of a remote are skipped.
-
-        Raises:
-            ValueError: if the base repository cannot be set because ``base_url`` is missing.
-            RuntimeError: if the default branch of the operation repository cannot be determined.
+        path must exist and be empty or contain a git repository. apparatus is None for a base-only pool.
+        If operation_url is None, the existing operation remote is used, and without one the pool is base-only.
+        base_url is needed to clone, or if there is no base remote yet.
+        Raises ValueError if the base cannot be set up, and RuntimeError if the operation repository has no
+        default branch.
         """
         self.conf_regex = re.compile(r"^operation/([^/]+)/(.*)$")
         self.base_regex = re.compile(r"^base/(.*)$")
@@ -190,19 +167,7 @@ class ConfPool:
                 self.repo.refs[b].rename(f"{b}/____BASE____")
 
     def _set_remote(self, name: str, url: str | None) -> bool:
-        """
-        Make sure that the remote ``name`` exists and, if ``url`` is given, that it points to ``url``.
-
-        If the remote already exists with a different URL, the URL is updated and the remote-tracking
-        branches that do not exist in the new remote are pruned, so that the old remote is never used.
-
-        Args:
-            name: name of the remote.
-            url: URL of the remote. If None, an existing remote is left untouched.
-
-        Returns:
-            True if the remote exists after the call, False if it does not exist and no URL is given.
-        """
+        """Create the remote, or update its URL. Return False if it does not exist and no URL is given."""
         remotes = {r.name: r for r in self.repo.remotes}
         if name not in remotes:
             if not url:
@@ -218,12 +183,7 @@ class ConfPool:
         return True
 
     def _set_default_branch(self) -> None:
-        """
-        Find the default branch of the operation repository and set the regex used to ignore it.
-
-        Raises:
-            RuntimeError: if the operation repository does not advertise a default branch.
-        """
+        """Set the regex matching the default branch of the operation repository, which is ignored."""
         operation = self._require_operation()
         output = self.repo.git.ls_remote("--symref", operation.url, "HEAD")
         default_branch = None
@@ -238,52 +198,28 @@ class ConfPool:
         self.default_regex = re.compile(rf"^(?:[^/]+/)?{default_branch}$")  ## we only check that it ends with this name
 
     def _require_operation(self) -> FetchTimedRemote:
-        """
-        Return the operation remote, failing if the pool is base-only.
-
-        Raises:
-            RuntimeError: if no operation repository is defined.
-        """
+        """Return the operation remote, or raise RuntimeError for a base-only pool."""
         if self.operation is None:
             raise RuntimeError("No operation repository is defined for this pool, an operation URL is needed")
         return self.operation
 
     def _require_apparatus(self) -> str:
-        """
-        Return the apparatus of the pool, failing if it is not set.
-
-        Raises:
-            RuntimeError: if no apparatus is defined.
-        """
+        """Return the apparatus, or raise RuntimeError if it is not set."""
         if not self.apparatus:
             raise RuntimeError("No apparatus is defined for this pool")
         return self.apparatus
 
     @staticmethod
     def default_apparatuses() -> list[str]:
-        """
-        Return the apparatuses for which runconftools knows the operation repositories.
-
-        Returns:
-            The sorted list of default apparatus names.
-        """
+        """Return the apparatuses with a default operation repository, sorted."""
         return sorted(Apparatus.values())
 
     def get_apparatuses(self, base: str | None = None) -> list[str]:
         """
-        Return the apparatuses supported by a base branch.
+        Return the apparatuses of a base branch: the directories in functions/generators.
 
-        The apparatuses are the subdirectories of ``functions/generators`` in the base branch.
-        If no base is given, the defaults from ``default_apparatuses`` are returned.
-
-        Args:
-            base: base branch to inspect. Note that it gets checked out in the local repository.
-
-        Returns:
-            The sorted list of apparatus names.
-
-        Raises:
-            ValueError: if ``base`` is not among the available base branches.
+        Without a base, return the default ones. The base gets checked out, and ValueError is raised
+        if it does not exist.
         """
         if not base:
             return self.default_apparatuses()
@@ -296,7 +232,7 @@ class ConfPool:
             logging.warning("Base %s has no generators", base)
             return []
 
-        ## skip hidden and private directories, e.g. __pycache__, and names that cannot be imported
+        ## skip __pycache__ and the like, and the names that cannot be imported
         return sorted(
             d for d in os.listdir(path)
             if d.isidentifier() and not d.startswith("_") and os.path.isdir(os.path.join(path, d))
@@ -309,27 +245,15 @@ class ConfPool:
         ssh: bool = True,
     ) -> dict[str, str]:
         """
-        Associate each apparatus with the URL of its operation repository.
+        Return the operation URL of each apparatus: the one in operation_urls, or its default.
 
-        Explicit URLs take precedence, otherwise the default URL of the apparatus is used.
-
-        Args:
-            apparatuses: names of the apparatuses. Duplicates are ignored.
-            operation_urls: explicit operation URLs, keyed by apparatus.
-            ssh: if True the default URLs use ssh, otherwise https.
-
-        Returns:
-            Mapping from apparatus name to operation URL, following the order of ``apparatuses``.
-
-        Raises:
-            ValueError: if ``operation_urls`` contains an apparatus that is not selected, if an
-                apparatus has neither an explicit nor a default URL, or if two apparatuses have the
-                same operation repository.
+        Raises ValueError for a URL given for an apparatus that is not selected, for an apparatus without
+        URL, and for two apparatuses with the same repository.
         """
         selected = list(dict.fromkeys(apparatuses))
         operation_urls = dict(operation_urls or {})
 
-        ## a typo in the explicit URLs would silently fall back to a default repository, so it's an error
+        ## a typo here would silently use the default repository
         unknown = [a for a in operation_urls if a not in selected]
         if unknown:
             raise ValueError(f"Operation URLs given for apparatuses that are not selected: {', '.join(unknown)}")
@@ -357,13 +281,9 @@ class ConfPool:
     @staticmethod
     def get_release(default:str = "develop") -> str :
         """
-        Return the DAQ release of the environment, e.g. ``fddaq-v5.7.2`` for ``fddaq-v5.7.2-a9-1``.
+        Return the release of the DAQ environment, fddaq-v5.7.2 for SPACK_RELEASE=fddaq-v5.7.2-a9-1.
 
-        Args:
-            default: value returned if ``SPACK_RELEASE`` is not set or is not a stable release (e.g. a nightly).
-
-        Returns:
-            The release name, or ``default``.
+        default is returned if SPACK_RELEASE is not set or is not a stable release, as for nightlies.
         """
         name = os.environ.get("SPACK_RELEASE")
         if not name:
@@ -377,12 +297,7 @@ class ConfPool:
 
     @staticmethod
     def is_stable_release(name: str) -> bool:
-        """
-        Check if a release name is the one of a stable DAQ release, e.g. ``fddaq-v5.7.2``.
-
-        Args:
-            name: release name, e.g. the prefix of the operation branches.
-        """
+        """Check if name is the name of a stable release, like fddaq-v5.7.2."""
         return re.match(r"^[^-/]+-v[0-9]+\.[0-9]+\.[0-9]+[^-/]*$", name) is not None
 
     def get_base_branches(self) -> list[str]:
@@ -565,25 +480,17 @@ class ConfPool:
 
     def import_function(self, module_name: str) -> ModuleType:
         """
-        Import a module from the ``functions`` directory of the local repository, e.g. ``generators.np02.monitoring``.
+        Import a module of the functions directory of this pool, like generators.np02.monitoring.
 
-        Python caches the imported modules, so after a checkout, or with several pools in the same process,
-        a plain import could return the code of another branch or of another pool.
-        Hence the modules previously imported from the ``functions`` directories are dropped from the cache
-        and the ``functions`` directory of this pool is put first in ``sys.path``.
-
-        Args:
-            module_name: full name of the module, relative to the ``functions`` directory.
-
-        Returns:
-            The freshly imported module.
+        The modules imported from the functions directories are dropped first, and the one of this pool is
+        put first in sys.path: otherwise python can return the module of another branch or pool.
         """
         functions = os.path.join(self.repo.working_dir, "functions")
         if functions in sys.path:
             sys.path.remove(functions)
         sys.path.insert(0, functions)
 
-        ## the packages provided by the functions directories, e.g. generators, verifiers, common
+        ## the packages of the functions directories
         packages = {"generators", "verifiers", "common", module_name.split(".")[0]}
         for name in list(sys.modules):
             if name.split(".")[0] in packages:
@@ -594,13 +501,9 @@ class ConfPool:
 
     def _set_verified(self, branch: str, verified: bool) -> None:
         """
-        Record, or forget, that the current commit of a local branch comes from a successful generation.
+        Record, or forget, the current commit of branch as a successful generation.
 
-        The record is the local ref ``refs/runconftools/verified/<branch>``, which is never pushed.
-
-        Args:
-            branch: name of the local branch.
-            verified: if True the current commit of the branch is recorded, otherwise the record is removed.
+        The record is the local ref refs/runconftools/verified/<branch>, which is never pushed.
         """
         ref = self.VERIFIED_REFS + branch
         if verified:
@@ -610,16 +513,9 @@ class ConfPool:
 
     def is_verified(self, branch: str) -> bool:
         """
-        Check that a local branch is exactly the result of a successful generation.
+        Check that branch still points to the commit of a successful generation.
 
-        A generation is successful if the generator, the verifiers and the validator all succeeded.
-        Any later change of the branch, e.g. a failed regeneration or a manual commit, makes it unverified.
-
-        Args:
-            branch: name of the local branch.
-
-        Returns:
-            True if the branch exists and points to the commit recorded by a successful generation.
+        The generation is successful if the generator, the verifiers and the validator all succeeded.
         """
         if branch not in [h.name for h in self.repo.heads]:
             return False
@@ -663,9 +559,8 @@ class ConfPool:
             self.repo.create_head(ref_name).checkout()
         else:
             logging.debug(f"Configuration {generator} overrides the existing operation branch")
-            ## start from the operation branch, dropping what previous local generations committed without
-            ## pushing (e.g. a dry run): the configuration is regenerated anyway, and the push then simply
-            ## extends the operation branch. Pulling into the local branch would fail in that case.
+            ## start from the operation branch: local commits that were not pushed are dropped, as everything
+            ## is regenerated (pulling the operation branch into them would fail)
             local_branches = [b.name for b in self.repo.branches]
             if ref_name in local_branches and self.repo.git.rev_list(f"operation/{ref_name}..{ref_name}"):
                 logging.info(f"The local commits of {ref_name} that were not pushed are replaced")
@@ -687,7 +582,7 @@ class ConfPool:
             res = self._run_generator(apparatus, generator, message)
         except Exception as e:
             self.last_failure = f"{type(e).__name__}: {e}"
-            ## keep the partial result for debugging and leave a clean working tree for the next generation
+            ## keep the partial result for debugging, and a clean tree for the next generator
             try:
                 self.commit(f"{message} [failed with an exception]")
             except Exception as e:
@@ -706,17 +601,7 @@ class ConfPool:
         return res
 
     def _run_generator(self, apparatus: str, generator: str, message: str) -> bool:
-        """
-        Run a generator, the verifiers and the validator on the checked out branch, committing the result.
-
-        Args:
-            apparatus: apparatus of the generator.
-            generator: name of the generator.
-            message: commit message.
-
-        Returns:
-            True if the generator, the verifiers and the validator all succeeded.
-        """
+        """Run the generator, the verifiers and the validator on the current branch, and commit."""
         # run the generator
         ## link the module
         module_name = "generators."+apparatus + "." + generator
@@ -768,17 +653,11 @@ class ConfPool:
             listener: GenerationListener | None = None,
     ) -> bool :    ## we return True if it's ok to proceed with a push because all went well
         """
-        Generate the configurations of the generators of the base selected by ``conf_regex``.
+        Generate the configurations of the generators of base matching conf_regex.
 
-        Args:
-            base: base branch to start from.
-            release_tag: release prefix of the branches, defaults to ``base``.
-            conf_regex: regex selecting the generators, matched from the start of the name.
-            no_push: if True the branches are only created locally.
-            listener: optional object notified before and after each generator.
-
-        Returns:
-            True if all the generations succeeded, a falsy value otherwise.
+        release_tag is the prefix of the branches, base by default. With no_push the branches are only
+        created locally. listener is notified before and after each generator.
+        Returns True if all the generations succeeded.
         """
         self._require_operation()
         if not release_tag:
@@ -821,15 +700,9 @@ class ConfPool:
                                  release_tag:str|None = None,
                                  conf_regex: re.Pattern = re.compile(r".*") ) -> list[str] | None :
         """
-        Return the local branches of the generators of the base selected by ``conf_regex``.
+        Return the local branches of the generators of base matching conf_regex.
 
-        Args:
-            base: base branch defining the generators.
-            release_tag: release prefix of the branches, defaults to ``base``.
-            conf_regex: regex selecting the generators, matched from the start of the name.
-
-        Returns:
-            The existing local branches, ``<release_tag>/<generator>``, or None if the base does not exist.
+        Returns None if the base does not exist.
         """
         if not release_tag:
             release_tag = base
@@ -847,11 +720,7 @@ class ConfPool:
                                       base:str,
                                       release_tag:str|None = None,
                                       conf_regex: re.Pattern = re.compile(r".*") ) -> list[str] :
-        """
-        Return the local branches that ``push_configurations`` would push but that are not verified.
-
-        See ``get_local_configurations`` for the arguments and ``is_verified`` for the definition of verified.
-        """
+        """Return the branches that push_configurations would push but that are not verified."""
         branches = self.get_local_configurations(base, release_tag, conf_regex) or []
         return [b for b in branches if not self.is_verified(b)]
 
@@ -860,17 +729,11 @@ class ConfPool:
                    release_tag:str|None = None,
                    conf_regex: re.Pattern = re.compile(r".*") ) -> list[str] :
         """
-        Check, without pushing, that ``push_configurations`` would succeed.
+        Check, without pushing, that push_configurations would work, and return the problems.
 
-        The branches must all be verified (see ``is_verified``) and must be accepted by the operation
-        repository, which is checked with a dry-run push: this detects unreachable repositories, missing
-        credentials and branches changed remotely in the meantime. Rules enforced by the server when
-        receiving a push, e.g. protected branches, are not checked.
-
-        See ``get_local_configurations`` for the arguments.
-
-        Returns:
-            The problems found, empty if the push can go ahead.
+        The branches must be verified, and a dry-run push must succeed: this catches unreachable
+        repositories, missing credentials and branches changed on the remote. The rules of the server,
+        like protected branches, are not checked.
         """
         self._require_operation()
         branches = self.get_local_configurations(base, release_tag, conf_regex)
@@ -905,16 +768,9 @@ class ConfPool:
                             release_tag:str|None = None,
                             conf_regex: re.Pattern = re.compile(r".*") ) -> bool :
         """
-        Push the local branches of the generators of the base selected by ``conf_regex``.
+        Push the local branches of the generators of base matching conf_regex.
 
-        Nothing is pushed unless all those branches come from a successful generation (see ``is_verified``),
-        so a failed or broken configuration never reaches the operation repository.
-
-        See ``get_local_configurations`` for the arguments.
-
-        Returns:
-            True if all the branches were pushed, False if nothing was pushed because the base does not
-            exist or some branches are not verified.
+        Nothing is pushed unless they are all verified. Returns True if they were pushed.
         """
         operation = self._require_operation()
         branches = self.get_local_configurations(base, release_tag, conf_regex)
@@ -939,17 +795,10 @@ class ConfPool:
                                     base:str,
                                     release_tag:str|None = None) -> list[str] :
         """
-        Return the operation branches of the release whose generators are not in the base anymore.
+        Return the operation branches of the release whose generator is not in the base anymore.
 
-        These are the branches that ``clean`` removes. Nothing is changed in the operation repository.
-
-        Args:
-            base: base branch defining the generators.
-            release_tag: release prefix of the branches, defaults to ``base``.
-
-        Returns:
-            The branches, ``<release_tag>/<configuration>``. Empty if the base does not exist or has no
-            generators for the apparatus, as all its configurations would look obsolete.
+        These are the branches removed by clean. The list is empty if the base has no generators for
+        the apparatus, as all the configurations would look obsolete.
         """
         self._require_operation()
         if not release_tag:
@@ -965,7 +814,7 @@ class ConfPool:
         logging.debug("Available confs: " + ", ".join(confs))
         logging.debug("Available generators: " + ", ".join(generators))
 
-        ## without generators every configuration would look obsolete, which is surely a mistake
+        ## without generators everything would look obsolete
         if not generators:
             logging.error(f"Base {base} has no generators for {self.apparatus}, nothing is removed")
             return []
@@ -985,14 +834,7 @@ class ConfPool:
     def clean(self,
               base:str,
               release_tag:str|None = None) -> list[str] :
-        """
-        Remove the operation branches of the release whose generators are not in the base anymore.
-
-        See ``get_obsolete_configurations`` for the arguments and the branches that are removed.
-
-        Returns:
-            The branches that were removed.
-        """
+        """Remove the branches of get_obsolete_configurations, and return them."""
         operation = self._require_operation()
         branches = self.get_obsolete_configurations(base, release_tag)
 
@@ -1034,15 +876,9 @@ class ConfPool:
 
     def commit(self, message: str) -> bool:
         """
-        Stage all the changes (modified, deleted and new files) and commit them.
+        Stage all the changes, new files included, and commit them.
 
-        The changes already in the index are committed too, e.g. the base restored by ``generate_conf``.
-
-        Args:
-            message: commit message.
-
-        Returns:
-            True if a commit was made, False if there was nothing to commit.
+        Returns False if there was nothing to commit.
         """
         ## new files are added too, in case they are useful for backup
         for f in self.repo.untracked_files:
@@ -1063,14 +899,9 @@ class ConfPool:
                                      release:str|None=None,
                                      conf_regex: re.Pattern = re.compile(r".*") ) -> list[str] :
         """
-        Return the operation branches that ``remove_configurations`` removes, without removing them.
+        Return the branches of release matching conf_regex, without the default branch.
 
-        Args:
-            release: release prefix of the branches. If None, nothing is selected.
-            conf_regex: regex selecting the configurations, matched from the start of the name.
-
-        Returns:
-            The branches, ``<release>/<configuration>``, never including the default branch.
+        These are the branches removed by remove_configurations.
         """
         self._require_operation()
         versions = self.get_daq_versions()
@@ -1098,14 +929,7 @@ class ConfPool:
     def remove_configurations(self,
                               release:str|None=None,
                               conf_regex: re.Pattern = re.compile(r".*") ) -> list[str] :
-        """
-        Remove from the operation repository the configurations of a release.
-
-        See ``get_removable_configurations`` for the arguments and the branches that are removed.
-
-        Returns:
-            The branches that were removed.
-        """
+        """Remove the branches of get_removable_configurations, and return them."""
         operation = self._require_operation()
         ret = []
         for branch in self.get_removable_configurations(release, conf_regex) :

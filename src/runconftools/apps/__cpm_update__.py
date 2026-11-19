@@ -124,7 +124,7 @@ def main(ctx, path, apparatus, base_url, operation_url, base, release, conf, pus
         pools = open_pools(path, operation_urls, base_url)
         check_apparatuses(pools, base)
 
-        ## a regex matching nothing is most likely a mistake, and apparatuses it does not concern are left untouched
+        ## apparatuses without matching generators are skipped, no match at all is an error
         selected = {}
         for name, pool in list(pools.items()):
             generators = [g for g in pool.get_generators(base) if conf_regex.match(g)]
@@ -154,7 +154,7 @@ def main(ctx, path, apparatus, base_url, operation_url, base, release, conf, pus
                         pool.propagate_base(base=base, release_tag=release, conf_regex=conf_regex, no_push=True,
                                             listener=listeners[name])
                 finally:
-                    ## never leave stdout redirected, e.g. when interrupted in the middle of a generator
+                    ## never leave stdout redirected, even when interrupted
                     if capture:
                         capture.stop()
                 report.current_apparatus = None
@@ -186,8 +186,7 @@ def main(ctx, path, apparatus, base_url, operation_url, base, release, conf, pus
             return
 
         report.step("Checking the push")
-        ## only branches coming from a successful generation and accepted by the operation repos
-        ## can be pushed, and they are checked for all the apparatuses before pushing anything
+        ## check the push of all the apparatuses before pushing anything
         branches = {}
         blocked = []
         for name, pool in pools.items():

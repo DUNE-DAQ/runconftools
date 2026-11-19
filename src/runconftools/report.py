@@ -1,9 +1,7 @@
 """
-Reporting for the ``cpm-*`` scripts: numbered steps, progress, collected problems and a final summary.
+Output of the cpm-* scripts: numbered steps, progress, the warnings and errors, and a summary.
 
-On a terminal the output uses colours, a live progress bar and the rich log format.
-Otherwise, e.g. when the output is redirected to a file, it is plain text with one timestamped
-line per log record, so that it can be read and searched with the usual tools.
+On a terminal it uses colours and a progress bar, otherwise plain lines with a timestamp.
 """
 
 import ctypes
@@ -50,12 +48,10 @@ except OSError:
 
 def flush_stdout() -> None:
     """
-    Write out what the generators printed so far, before the report prints anything.
+    Flush stdout, both the python and the C buffers.
 
-    The report goes to stderr, which is written immediately, while stdout is buffered when it is not
-    a terminal, e.g. in a log file: without this, the output of the generators would end up after the
-    lines reporting their result, and its last part even after the summary. Both the python buffer and
-    the C ones (used by the C++ libraries) are flushed.
+    The report writes to stderr straight away, while stdout is buffered when it is not a terminal:
+    without this the output of the generators ends up after their result in log files.
     """
     try:
         sys.stdout.flush()
@@ -69,7 +65,7 @@ def flush_stdout() -> None:
 
 
 class _OrderedStreamHandler(logging.StreamHandler):
-    """Stream handler flushing stdout before each record, see ``flush_stdout``."""
+    """Stream handler flushing stdout before each record."""
 
     def emit(self, record: logging.LogRecord) -> None:
         flush_stdout()
@@ -78,10 +74,9 @@ class _OrderedStreamHandler(logging.StreamHandler):
 
 class OutputCapture:
     """
-    Send what is printed to stdout to a file, e.g. the output of a generator in quiet mode.
+    Redirect stdout to a file, used for the output of the generators in quiet mode.
 
-    Both ``sys.stdout`` and the stdout file descriptor are redirected, so that the output of the
-    C++ libraries is captured too. The report itself prints to stderr and is not affected.
+    The file descriptor is redirected too, to catch the output of the C++ libraries.
     """
 
     def __init__(self) -> None:
@@ -91,7 +86,7 @@ class OutputCapture:
         self._fd: int | None = None
 
     def start(self, path: Path) -> None:
-        """Start sending stdout to ``path``, which is overwritten."""
+        """Send stdout to path, which is overwritten."""
         self.stop()
         flush_stdout()
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -101,13 +96,13 @@ class OutputCapture:
             self._saved_fd = os.dup(self._fd)
             os.dup2(self._file.fileno(), self._fd)
         except (AttributeError, OSError, ValueError):
-            ## no real stdout, e.g. in some test runners: only the python output is captured
+            ## no real stdout (some test runners): only the python output is captured
             self._fd = self._saved_fd = None
         self._saved_stdout = sys.stdout
         sys.stdout = self._file
 
     def stop(self) -> None:
-        """Restore stdout, if it is captured."""
+        """Restore stdout."""
         if self._file is None:
             return
         flush_stdout()
@@ -122,7 +117,7 @@ class OutputCapture:
 
 @dataclass
 class Failure:
-    """An item, e.g. a configuration, that failed."""
+    """Something that failed, with the reason and, in quiet mode, its log file."""
 
     apparatus: str
     item: str
@@ -133,15 +128,10 @@ class Failure:
 
 
 class Stop(Exception):
-    """Stop the run: the message is reported as the error that stopped it."""
+    """Raised to stop the run, the message ends up in the summary."""
 
     def __init__(self, message: str, hint: str | None = None, exit_code: int = 1) -> None:
-        """
-        Args:
-            message: what went wrong.
-            hint: what the user can do about it.
-            exit_code: exit code of the script.
-        """
+        """hint tells the user what to do, exit_code is the exit code of the script."""
         super().__init__(message)
         self.hint = hint
         self.exit_code = exit_code
@@ -149,7 +139,7 @@ class Stop(Exception):
 
 @dataclass
 class Problem:
-    """A warning or an error, with where it happened."""
+    """A warning or an error, and where it happened."""
 
     level: int
     message: str
@@ -159,7 +149,7 @@ class Problem:
 
 
 class _Collector(logging.Handler):
-    """Logging handler storing the warnings and errors in the report."""
+    """Collect the logged warnings and errors for the summary."""
 
     def __init__(self, report: "Report") -> None:
         super().__init__(logging.WARNING)
@@ -170,7 +160,7 @@ class _Collector(logging.Handler):
 
 
 class ItemProgress:
-    """Progress of a sequence of items, e.g. the generators, see ``Report.progress``."""
+    """Progress of a list of items, see Report.progress."""
 
     def __init__(self, report: "Report", progress: Progress, task: int, total: int) -> None:
         self.report = report
@@ -180,14 +170,14 @@ class ItemProgress:
         self.done = 0
 
     def start(self, label: str) -> None:
-        """Announce that the item ``label`` is being processed."""
+        """Show that label is being processed."""
         flush_stdout()
         self.progress.update(self.task, description=label)
         if not self.report.console.is_terminal:
             self.report.console.print(Text(f"  … {self._counter(self.done + 1)} {label}"), soft_wrap=True)
 
     def finish(self, label: str, success: bool, reason: str | None = None) -> None:
-        """Record the result of the item ``label``."""
+        """Print the result of label."""
         flush_stdout()
         self.done += 1
         self.progress.advance(self.task)
@@ -207,14 +197,10 @@ class ItemProgress:
 
 class Report:
     """
-    Context manager reporting a run of a script.
+    Prints the steps of a script and a summary at the end.
 
-    It prints the header and the numbered steps, collects all the warnings and errors (including the
-    ones logged by the library), and always ends with a summary: a table of the results per apparatus,
-    the problems and a final verdict. The exceptions stopping the run (``Stop`` and click errors) are
-    reported in the summary and turned into the exit code of the script.
-
-    Example::
+    The warnings and errors, also the ones logged by ConfPool, are collected for the summary.
+    Stop and the click exceptions end in the summary and set the exit code.
 
         with Report("cpm-update", ["Checking", "Generating"], context={"Base": base}) as report:
             report.step("Checking")
@@ -225,12 +211,8 @@ class Report:
     def __init__(self, title: str, steps: list[str], context: dict[str, str] | None = None, debug: bool = False,
                  quiet: bool = False) -> None:
         """
-        Args:
-            title: name of the script.
-            steps: names of all the steps that will be executed, in order.
-            context: parameters of the run shown in the header, e.g. the base and the release.
-            debug: whether the debug messages are printed.
-            quiet: if True only the errors are logged while running, the warnings are only in the summary.
+        context is shown in the header. With quiet only the errors are printed while running,
+        the warnings are in the summary.
         """
         self.title = title
         self.steps = steps
@@ -246,16 +228,16 @@ class Report:
         ## summary table: one row per apparatus, in the order of the columns
         self.columns: list[str] = []
         self.rows: dict[str, dict[str, str]] = {}
-        ## items, e.g. configurations, that failed
+        ## failed items
         self.failures: list[Failure] = []
         ## steps in which the failures were recorded: their errors are already explained by the failures
         self._failure_steps: set[int] = set()
         ## warnings collapsed in the summary: (regex with an 'item' group, title)
         self._warning_groups: list[tuple[re.Pattern, str]] = []
-        ## extra lines of the final verdict, e.g. what was not done
+        ## extra lines of the final verdict
         self.notes: list[str] = []
         self.success_message = "All done"
-        ## title of the final verdict when the run succeeds, e.g. to make a dry run obvious
+        ## title of the final verdict on success, DRY RUN for a dry run
         self.success_title = "✔ SUCCESS"
 
         self._handlers: list[logging.Handler] = []
@@ -329,7 +311,7 @@ class Report:
 
     @property
     def where(self) -> str:
-        """Description of the current step and apparatus."""
+        """Current step and apparatus, as shown in the summary."""
         if not self.current_step:
             where = "start-up"
         else:
@@ -339,7 +321,7 @@ class Report:
         return where
 
     def step(self, name: str) -> None:
-        """Start the step ``name``, which must be one of the steps given at construction."""
+        """Start the step name, one of the steps given to the constructor."""
         self.current_step = self.steps.index(name) + 1
         self.current_apparatus = None
         flush_stdout()
@@ -349,7 +331,7 @@ class Report:
 
     @contextmanager
     def apparatus(self, name: str) -> Iterator[None]:
-        """Context in which the messages concern the apparatus ``name``."""
+        """Context in which the messages are about the apparatus name."""
         self.current_apparatus = name
         self.console.print(Text(f"▸ {name}", style="bold"))
         try:
@@ -360,9 +342,9 @@ class Report:
     @contextmanager
     def progress(self, total: int) -> Iterator[ItemProgress]:
         """
-        Show the progress of ``total`` items, with a live bar on a terminal.
+        Progress of total items, with a bar on a terminal.
 
-        Each finished item is also printed with its counter and percentage, so they are in the log too.
+        Each finished item is also printed with its counter, so that it is in the logs too.
         """
         columns = [SpinnerColumn(), TextColumn("{task.description}"), BarColumn(),
                    TextColumn("{task.percentage:>3.0f}%"), TextColumn("{task.completed}/{task.total}"),
@@ -383,12 +365,12 @@ class Report:
         self._line("✔", message, "green")
 
     def warn(self, message: str) -> None:
-        """Print a warning, which is also listed in the summary."""
+        """Print a warning, also listed in the summary."""
         self._line("⚠", message, "yellow")
         self._record(logging.WARNING, message)
 
     def error(self, message: str) -> None:
-        """Print an error, which is also listed in the summary."""
+        """Print an error, also listed in the summary."""
         self._line("✘", message, "red")
         self._record(logging.ERROR, message)
 
@@ -404,15 +386,10 @@ class Report:
 
     def add_failure(self, apparatus: str, item: str, reason: str, log: Path | None = None) -> None:
         """
-        Record that ``item`` (e.g. a configuration) of ``apparatus`` failed, for the summary.
+        Record a failed item for the summary.
 
-        The errors logged in the same step for an apparatus are then not repeated in the summary.
-
-        Args:
-            apparatus: apparatus of the item.
-            item: what failed.
-            reason: why it failed.
-            log: file with the output of the item, whose last lines are shown in the summary.
+        The errors logged for the same apparatus in this step are not listed again.
+        With log, the last lines of that file are shown.
         """
         tail = []
         if log is not None:
@@ -425,17 +402,11 @@ class Report:
         self._failure_steps.add(self.current_step)
 
     def group_warnings(self, pattern: str, title: str) -> None:
-        """
-        Collapse the warnings matching ``pattern`` into a single line of the summary.
-
-        Args:
-            pattern: regex matching the whole warning, with a group named ``item`` listed in the line.
-            title: title of the line, e.g. "Generators without validation".
-        """
+        """Show the warnings matching pattern as one line of the summary, listing their item group."""
         self._warning_groups.append((re.compile(pattern), title))
 
     def set_result(self, apparatus: str, column: str, value: str) -> None:
-        """Set a cell of the summary table, adding the row and the column if needed."""
+        """Set a cell of the summary table."""
         if column not in self.columns:
             self.columns.append(column)
         self.rows.setdefault(apparatus, {})[column] = value
@@ -470,7 +441,7 @@ class Report:
         console.print(Rule(Text(" Summary ", style="bold"), style="bold"))
 
         if self.rows:
-            ## columns declared in advance but never filled, e.g. Pushed when not pushing, are hidden
+            ## hide the columns that were never filled
             columns = [c for c in self.columns if any(c in values for values in self.rows.values())]
             table = Table(box=box.ROUNDED, header_style="bold")
             table.add_column("Apparatus", style="bold")

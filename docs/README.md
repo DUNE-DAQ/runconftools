@@ -70,40 +70,31 @@ All script names start with `cpm-`, which stands for Configuration Pool Manageme
 
 The default release (`-r`) and, for `cpm-update`, the default base (`-b`) are taken from the DAQ environment: 
 for `SPACK_RELEASE=fddaq-v5.7.2-a9-1` they are `fddaq-v5.7.2`. 
-If `SPACK_RELEASE` is not set or is not a stable release (e.g. a nightly), they default to `develop`. 
+If `SPACK_RELEASE` is not set or is not a stable release, as for nightlies, they default to `develop`. 
 To avoid pushing `develop` by accident, when `SPACK_RELEASE` is not set `cpm-update` requires `-b` and `-r` to be given explicitly in order to push. 
 The base and release in use are always printed.
 
 As the configuration branches are named `<release>/<configuration_key>`, a release cannot contain `/`, cannot start with `-` and must be valid in a git branch name. 
 
 ### Output and exit codes
-All the scripts report what they do in the same way:
- - a header with the parameters of the run (path, apparati, base, release, ...) and the list of the steps;
- - each step starts with a line `Step <i>/<n> · <name>`, so it is always clear where the script is;
- - during the generation, every configuration is printed with its result, counter and percentage, e.g. `✔ [ 7/48  15%] np02 · monitoring` or `✘ [ 8/48  17%] np04 · femb_pulser — verifier readout_verification failed`, and on a terminal a live progress bar is shown;
- - a summary at the end, also when the script stops because of an error: a table with the result of each apparatus, 
-   the failed configurations with the reason, all the errors and warnings with the step (and apparatus) where they happened, 
-   and a final verdict, `SUCCESS`, `COMPLETED WITH ERRORS`, `FAILED`, or `DRY RUN` for a `--dry-run`. 
-   A failure says at which step the script stopped, what was not done (e.g. `Nothing was pushed to any operation repository.`) and what to do next.
+All the scripts print a header with the parameters of the run and the list of steps, and a line `Step <i>/<n> · <name>` at the start of each step. 
+During the generation, each configuration is printed with its result and a counter, like `✔ [ 7/48  15%] np02 · monitoring`. 
+At the end there is always a summary, also when the script stops: the result of each apparatus, the failed configurations with the reason, the errors and warnings, and a verdict (`SUCCESS`, `COMPLETED WITH ERRORS`, `FAILED`, or `DRY RUN`). 
+When the script stops, the verdict says at which step, what was not done and what to do next.
 
-On a terminal the output is coloured. When it is redirected, e.g. to a file, it is plain text and every log line has a timestamp, so it can be searched with the usual tools. 
+On a terminal the output is coloured; when it is redirected to a file, it is plain text with a timestamp on every log line. 
 The colours can also be disabled with the `NO_COLOR` environment variable. 
 
-The generators and the verifiers print a lot. With `cpm-update -q` (`--quiet`) their output is not printed but saved in `PATH/_logs/<apparatus>/<generator>.log`, overwritten at every run, 
-so that only the steps, the result of each configuration and the errors are printed, while the warnings are listed in the summary. 
-If a configuration fails, the summary shows its log file and its last lines. 
-The details of the git operations and of the generators are printed with `--debug`.
+The generators and the verifiers print a lot. With `cpm-update -q` their output goes to `PATH/_logs/<apparatus>/<generator>.log` instead, overwritten at every run, and only the steps, the results and the errors are printed. 
+For a failed configuration, the summary shows its log file and its last lines. 
+With `--debug` the details of the git operations are printed too.
 
 The exit code is `0` on success, `1` when the script stops because of a failure, `2` for wrong options and `130` when interrupted.
 
 ### Checks before starting
-Before anything is cloned or changed, all the scripts check that:
- - the base and the operation repositories can be reached (which also checks your credentials) and that each operation repository has a default branch;
- - no two apparati share the same operation repository, also when written as ssh and https URLs, and the base is not used as an operation repository;
- - the local repositories `PATH/<apparatus>` have no uncommitted changes, which could end up in the configurations. 
-   Inspect them with `git status`, then commit or discard the changes, or use a new `PATH`.
-
-The operation repository used for each apparatus is printed.
+Before cloning or changing anything, the scripts check that the base and the operation repositories can be reached, which also checks your credentials, and that each operation repository has a default branch. 
+They also stop if two apparati have the same operation repository, or if the base is used as an operation repository. 
+The local repositories `PATH/<apparatus>` must not have uncommitted changes, as they could end up in the configurations: check them with `git status`, then commit or discard the changes, or use a new `PATH`.
 
 ### Working on several apparatuses
 All the scripts accept one or more apparatuses with `-a`, either repeating the option or as a comma separated list:
@@ -115,7 +106,7 @@ If `-a` is not given, only `np02` is used.
 `-a all` selects all the apparatuses: for `cpm-setup` and `cpm-update` these are the apparati defined in the selected base, 
 for `cpm-purge`, which has no base, these are the apparati with a default operation repository in `runconftools`.
 
-Every apparatus gets its own local repository in `PATH/<apparatus>` (e.g. `TempTest/np02`), since the configuration branches of different apparati share the same names. 
+Every apparatus gets its own local repository in `PATH/<apparatus>`, like `TempTest/np02`, since the configuration branches of different apparati share the same names. 
 `PATH` and its subdirectories are created if needed. 
 With `-a all`, the base is inspected in `PATH/_base`.
 
@@ -241,12 +232,12 @@ For example
 ```bash
 cpm-update -a np04 -r mroda --conf "monitoring" Test
 ```
-will create branches called `mroda/monitoring<something>` (e.g. `mroda/monitoring` and `mroda/monitoring_no_tpg`) and will ignore all the other generators.
+will create branches called `mroda/monitoring<something>` (`mroda/monitoring` and `mroda/monitoring_no_tpg` for np04) and will ignore all the other generators.
 Use `--conf "monitoring$"` to select only `monitoring`.
 If the regex matches no generator of an apparatus, that apparatus is skipped: it is neither generated, nor pushed, nor cleaned. 
 If it matches no generator at all, the script stops with an error.
 
-The generators use the software of the DAQ environment: when generating configurations for a stable release (e.g. `-r fddaq-v5.7.2`) from the environment of a different release, a warning is printed. 
+The generators use the software of the DAQ environment, so a warning is printed when the release is a stable one, like `fddaq-v5.7.2`, and the environment is of a different release. 
 
 When generators are executed, so are the configuration verifiers. 
 If the base has no verifiers, the configurations cannot be verified and the generation fails. 
@@ -263,7 +254,7 @@ After a local generation, `cpm-update` can be followed up with another call with
 A branch that failed or is broken is never pushed, neither with `-p` nor with `--push-only`. 
 When a generation succeeds (generator, verifiers and validator), its commit is recorded in the local ref `refs/runconftools/verified/<branch>`; 
 the record is removed as soon as the branch is regenerated, and a branch is only pushed if it still points to the recorded commit. 
-So `--push-only` refuses branches whose last generation failed, branches changed by hand after the generation, and branches without a record of a successful generation, e.g. in areas created by older versions of runconftools. 
+So `--push-only` refuses branches whose last generation failed, branches changed by hand after the generation, and branches without a record of a successful generation, as in areas created by older versions of runconftools. 
 If any selected branch of any selected apparatus is not verified, nothing is pushed and the script exits with an error: regenerate the configurations first.
 
 Before pushing anything, the push of every branch of every apparatus is also tried with `git push --dry-run`. 
@@ -273,7 +264,7 @@ Rules applied by the server when receiving the push, like protected branches, ca
 After pushing, with either `-p` or `--push-only`, the branches of the release whose generators no longer exist in the base are removed from the operation repositories. 
 The branches to be removed are printed before removing them. 
 If the base has no generators for an apparatus, nothing is removed from its operation repository, as all its configurations would look obsolete. 
-Note that the removal compares with the base given with `-b`: always use the base the release was generated from.
+The removal compares with the base given with `-b`, so always use the base the release was generated from.
 
 #### Previewing a push with `--dry-run`
 `cpm-update --dry-run` shows what `-p` would do, without changing the operation repositories. 
@@ -320,7 +311,7 @@ Options:
 
 This removes the branches for the release specified with `-r`, which is mandatory.
 As for the update script, the configuration keys can be selected using a regex with the option `--conf`, which is matched from the start of the configuration name. 
-If nothing is removed from any of the selected apparati, e.g. because the release or the configurations do not exist, the script exits with an error. 
+If nothing is removed at all, because the release or the configurations do not exist, the script exits with an error. 
 For example, `cpm-purge -a all -r mroda-test Temp` removes all the `mroda-test` configurations from all the operation repositories. 
 With `--dry-run`, the configurations that would be removed are only listed, and nothing is removed.
 
@@ -336,7 +327,7 @@ from runconftools.ConfPool import ConfPool
 ## the directory must exist, and be either empty or a local repository
 Path("Temp/_base").mkdir(parents=True, exist_ok=True)
 pool = ConfPool("Temp/_base", apparatus=None, base_url="https://gitlab.cern.ch/dune-daq/online/ehn1-daqconfigs.git")
-apparati = pool.get_apparatuses("fddaq-v5.7.2")   ## e.g. ['np02', 'np02_emu', 'np04', 'np04_emu', 'vd_coldbox']
+apparati = pool.get_apparatuses("fddaq-v5.7.2")   ## ['np02', 'np02_emu', 'np04', 'np04_emu', 'vd_coldbox']
 defaults = pool.get_apparatuses()                 ## without a base, the defaults known by runconftools
 
 ## operation URL of each apparatus, explicit URLs override the defaults

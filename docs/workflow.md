@@ -54,8 +54,8 @@ cd ..   ##to go back to the previous level
 cpm-update -a all -b mroda/my_dev -r mroda-test TempTest
 ```
 Here you will see if the generators keep working correctly. 
-You can even inspect all the generated branches, in the local repository of each apparatus, e.g. `TempTest/np02`. 
-If only some apparati are affected by the change, they can be listed instead of `all`, e.g. `-a np02,np02_emu`.
+You can even inspect all the generated branches, in the local repository of each apparatus (`TempTest/np02`, ...). 
+If only some apparati are affected by the change, they can be listed instead of `all`, like `-a np02,np02_emu`.
 
 If you need to push the branches on operation so that they can be tested by a shifter, you can do that too. 
 In this case simply push with:
