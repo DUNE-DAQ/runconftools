@@ -935,14 +935,26 @@ class ConfPool:
             operation.push(b)
         return True
 
-    def clean(self,
-              base:str,
-              release_tag:str|None = None) -> list[str] :
+    def get_obsolete_configurations(self,
+                                    base:str,
+                                    release_tag:str|None = None) -> list[str] :
+        """
+        Return the operation branches of the release whose generators are not in the base anymore.
 
-        operation = self._require_operation()
+        These are the branches that ``clean`` removes. Nothing is changed in the operation repository.
+
+        Args:
+            base: base branch defining the generators.
+            release_tag: release prefix of the branches, defaults to ``base``.
+
+        Returns:
+            The branches, ``<release_tag>/<configuration>``. Empty if the base does not exist or has no
+            generators for the apparatus, as all its configurations would look obsolete.
+        """
+        self._require_operation()
         if not release_tag:
             release_tag = base
-            
+
         base_head = self.checkout_base(base)
         if not base_head:
             return []
@@ -968,6 +980,21 @@ class ConfPool:
                 logging.debug(f"{branch} is not removed because it's the remote default")
                 continue
             branches.append(branch)
+        return branches
+
+    def clean(self,
+              base:str,
+              release_tag:str|None = None) -> list[str] :
+        """
+        Remove the operation branches of the release whose generators are not in the base anymore.
+
+        See ``get_obsolete_configurations`` for the arguments and the branches that are removed.
+
+        Returns:
+            The branches that were removed.
+        """
+        operation = self._require_operation()
+        branches = self.get_obsolete_configurations(base, release_tag)
 
         if branches:
             logging.warning(f"These {self.apparatus} configurations have no generator in base {base} "
@@ -1032,11 +1059,20 @@ class ConfPool:
         return True
 
 
-    def remove_configurations(self,
-                              release:str|None=None,
-                              conf_regex: re.Pattern = re.compile(r".*") ) -> list[str] :
+    def get_removable_configurations(self,
+                                     release:str|None=None,
+                                     conf_regex: re.Pattern = re.compile(r".*") ) -> list[str] :
+        """
+        Return the operation branches that ``remove_configurations`` removes, without removing them.
 
-        operation = self._require_operation()
+        Args:
+            release: release prefix of the branches. If None, nothing is selected.
+            conf_regex: regex selecting the configurations, matched from the start of the name.
+
+        Returns:
+            The branches, ``<release>/<configuration>``, never including the default branch.
+        """
+        self._require_operation()
         versions = self.get_daq_versions()
 
         if not release:
@@ -1050,12 +1086,29 @@ class ConfPool:
         confs = self.get_confs(release=re.compile("^"+release+"$"),
                                regex=conf_regex)
 
-        ret = []
+        branches = []
         for c in confs :
             branch = f"{release}/{c}"
             if self.is_default_branch(branch) :
                 logging.debug(f"{branch} is not removed because it's the remote default")
                 continue
+            branches.append(branch)
+        return branches
+
+    def remove_configurations(self,
+                              release:str|None=None,
+                              conf_regex: re.Pattern = re.compile(r".*") ) -> list[str] :
+        """
+        Remove from the operation repository the configurations of a release.
+
+        See ``get_removable_configurations`` for the arguments and the branches that are removed.
+
+        Returns:
+            The branches that were removed.
+        """
+        operation = self._require_operation()
+        ret = []
+        for branch in self.get_removable_configurations(release, conf_regex) :
             try :
                 operation.push(f":{branch}")
                 ret.append(branch)

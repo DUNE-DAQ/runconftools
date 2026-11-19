@@ -83,7 +83,7 @@ All the scripts report what they do in the same way:
  - during the generation, every configuration is printed with its result, counter and percentage, e.g. `✔ [ 7/48  15%] np02 · monitoring` or `✘ [ 8/48  17%] np04 · femb_pulser — verifier readout_verification failed`, and on a terminal a live progress bar is shown;
  - a summary at the end, also when the script stops because of an error: a table with the result of each apparatus, 
    the failed configurations with the reason, all the errors and warnings with the step (and apparatus) where they happened, 
-   and a final verdict, `SUCCESS`, `COMPLETED WITH ERRORS` or `FAILED`. 
+   and a final verdict, `SUCCESS`, `COMPLETED WITH ERRORS`, `FAILED`, or `DRY RUN` for a `--dry-run`. 
    A failure says at which step the script stopped, what was not done (e.g. `Nothing was pushed to any operation repository.`) and what to do next.
 
 On a terminal the output is coloured. When it is redirected, e.g. to a file, it is plain text and every log line has a timestamp, so it can be searched with the usual tools. 
@@ -218,6 +218,11 @@ Options:
                         of them come from a successful generation
   -p, --push            Pushes the branches, otherwise they are only created
                         locally
+  --dry-run             Preview what -p would do: generate locally (unless
+                        --push-only) and check the push with the operation
+                        repos, then list the configurations that would be
+                        pushed and removed, without changing the operation
+                        repos
   -q, --quiet           Do not print the output of the generators and
                         verifiers, save it in
                         PATH/_logs/<apparatus>/<generator>.log instead. Only
@@ -275,6 +280,16 @@ The branches to be removed are printed before removing them.
 If the base has no generators for an apparatus, nothing is removed from its operation repository, as all its configurations would look obsolete. 
 Note that the removal compares with the base given with `-b`: always use the base the release was generated from.
 
+#### Previewing a push with `--dry-run`
+`cpm-update --dry-run` shows what `-p` would do, without changing the operation repositories. 
+It goes through the same steps as `-p`, so it generates the configurations locally (unless `--push-only` is given) and checks the push with the operation repositories, with the same checks and failures. 
+Then, instead of pushing and removing, it lists for each apparatus the configurations that would be pushed and the ones that would be removed, and ends with a `DRY RUN` verdict:
+```bash
+cpm-update -a all -b fddaq-v5.7.2 -r fddaq-v5.7.2 --dry-run Temp   # check what would happen
+cpm-update -a all -b fddaq-v5.7.2 -r fddaq-v5.7.2 -p Temp          # then do it
+```
+The second call regenerates the configurations: if the base did not change in between, they are the same as the ones previewed.
+
 ### cpm-purge
 Sometimes temporary branches must be pushed to operation repositories as they need to be tested through the shifter interface.
 Once the test is done the branches should be removed with `cpm-purge`.
@@ -302,6 +317,8 @@ Options:
   --conf TEXT           Regex to select a subset of branches, matched from the
                         start of the configuration name (end it with '$' to
                         match the whole name)  [default: .*]
+  --dry-run             Only list the configurations that would be removed,
+                        without removing them
   --debug               Set debug print levels
   --help                Show this message and exit.
 ```
@@ -309,7 +326,8 @@ Options:
 This removes the branches for the release specified with `-r`, which is mandatory.
 As for the update script, the configuration keys can be selected using a regex with the option `--conf`, which is matched from the start of the configuration name. 
 If nothing is removed from any of the selected apparati, e.g. because the release or the configurations do not exist, the script exits with an error. 
-For example, `cpm-purge -a all -r mroda-test Temp` removes all the `mroda-test` configurations from all the operation repositories.
+For example, `cpm-purge -a all -r mroda-test Temp` removes all the `mroda-test` configurations from all the operation repositories. 
+With `--dry-run`, the configurations that would be removed are only listed, and nothing is removed.
 
 ## Python interface
 The scripts are thin wrappers around the `ConfPool` class, which can be used directly. 

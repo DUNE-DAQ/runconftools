@@ -46,6 +46,9 @@ LOGS_DIR = "_logs"
                    "Nothing is pushed unless all of them come from a successful generation")
 @click.option("-p", "--push", type=click.BOOL, default=False, is_flag=True,
               help="Pushes the branches, otherwise they are only created locally")
+@click.option("--dry-run", type=click.BOOL, default=False, is_flag=True,
+              help="Preview what -p would do: generate locally (unless --push-only) and check the push with the operation repos, "
+                   "then list the configurations that would be pushed and removed, without changing the operation repos")
 
 @click.option("-q", "--quiet", type=click.BOOL, default=False, is_flag=True,
               help=f"Do not print the output of the generators and verifiers, save it in PATH/{LOGS_DIR}/<apparatus>/<generator>.log instead. "
@@ -58,7 +61,7 @@ LOGS_DIR = "_logs"
     help="Set debug print levels",
 )
 @click.pass_context
-def main(ctx, path, apparatus, base_url, operation_url, base, release, conf, push_only, push, quiet, debug):
+def main(ctx, path, apparatus, base_url, operation_url, base, release, conf, push_only, push, dry_run, quiet, debug):
 
     """
     This script takes the base branch and propagates the changes to the operation repos, creating the necessary configurations.
@@ -66,13 +69,19 @@ def main(ctx, path, apparatus, base_url, operation_url, base, release, conf, pus
     When several apparatuses are selected, nothing is pushed unless the generation succeeded for all of them.
     """
 
+    ## a dry run goes through the same steps as -p, up to the checks of the push
+    push = push or dry_run
     pushing = push or push_only
     steps = ["Checking options and repositories", "Preparing local repositories"]
     if not push_only:
         steps.append("Generating configurations")
-    if pushing:
+    if dry_run:
+        steps += ["Checking the push", "Previewing the push"]
+    elif pushing:
         steps += ["Checking the push", "Pushing configurations", "Removing obsolete configurations"]
     mode = "push only" if push_only else ("generate and push" if push else "generate locally, no push")
+    if dry_run:
+        mode = f"DRY RUN of {mode}: the operation repos are not changed"
     context = {
         "Path": path,
         "Apparatuses": "all" if apparatus is None else ", ".join(apparatus),
@@ -87,7 +96,7 @@ def main(ctx, path, apparatus, base_url, operation_url, base, release, conf, pus
         context["Output"] = f"quiet, generator output in {logs}"
 
     with Report("cpm-update", steps, context=context, debug=debug, quiet=quiet) as report:
-        report.columns = ["Selected", "Generated", "Pushed", "Removed", "Result"]
+        report.columns = ["Selected", "Generated", "Pushed", "Removed", "Would push", "Would remove", "Result"]
         report.step("Checking options and repositories")
 
         ## outside of a DAQ environment the defaults fall back to develop, which must not be pushed by accident
@@ -199,6 +208,26 @@ def main(ctx, path, apparatus, base_url, operation_url, base, release, conf, pus
             report.notes.append("Nothing was pushed to any operation repository.")
             raise Stop(f"The push check failed for {', '.join(blocked)}",
                        hint="Regenerate the configurations (without --push-only), or check the operation repositories")
+
+        if dry_run:
+            report.step("Previewing the push")
+            would_remove = 0
+            for name, pool in pools.items():
+                report.current_apparatus = name
+                report.info(f"{name}: would push {', '.join(branches[name]) or 'nothing'}")
+                obsolete = pool.get_obsolete_configurations(base=base, release_tag=release)
+                would_remove += len(obsolete)
+                if obsolete:
+                    report.warn(f"{name}: would remove {', '.join(obsolete)} (no generator in base {base})")
+                report.set_result(name, "Would push", str(len(branches[name])))
+                report.set_result(name, "Would remove", str(len(obsolete)))
+                report.set_result(name, "Result", "✔ dry run")
+            report.current_apparatus = None
+            report.success_title = "✔ DRY RUN"
+            report.success_message = (f"With -p, {sum(len(b) for b in branches.values())} configurations would be pushed "
+                                      f"and {would_remove} removed")
+            report.notes.append("Nothing was pushed or removed. Run without --dry-run to do it.")
+            return
 
         report.step("Pushing configurations")
         pushed = []

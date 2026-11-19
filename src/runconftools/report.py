@@ -255,6 +255,8 @@ class Report:
         ## extra lines of the final verdict, e.g. what was not done
         self.notes: list[str] = []
         self.success_message = "All done"
+        ## title of the final verdict when the run succeeds, e.g. to make a dry run obvious
+        self.success_title = "✔ SUCCESS"
 
         self._handlers: list[logging.Handler] = []
         self._level = logging.NOTSET
@@ -547,7 +549,7 @@ class Report:
             if errors:
                 title, style = "⚠ COMPLETED WITH ERRORS", "yellow"
             else:
-                title, style = "✔ SUCCESS", "green"
+                title, style = self.success_title, "green"
         lines.append(Text(f"{self.title} finished in {duration}, exit code {exit_code}", style="dim"))
         console.print(Panel(Group(*lines), title=Text(f" {title} ", style=f"bold {style}"), title_align="left",
                             border_style=style, expand=False))

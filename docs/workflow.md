@@ -78,6 +78,8 @@ Once the merge is done we just need to recreate the operation branches for the p
 Most likely this is an operation done by run coordinators. 
 
 ```bash
+## preview first: what would be pushed and which obsolete configurations would be removed
+cpm-update -a all -b fddaq-v5.2.2 -r fddaq-v5.2.2 --dry-run Temp
 cpm-update -a all -b fddaq-v5.2.2 -r fddaq-v5.2.2 -p Temp
 ## please note that the specification of base and release at this point might be the defaults 
 ## And it might not be necessary to specify them.
@@ -87,6 +89,7 @@ With `-p`, nothing is pushed unless the generation succeeded for all the apparat
 
 If test branches were created on the operation remote repositories, those should be deleted:
 ```bash
+cpm-purge -a all -r mroda-test --dry-run Temp   # list what would be removed
 cpm-purge -a all -r mroda-test Temp
 rm -rf Temp
 ```

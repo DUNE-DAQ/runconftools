@@ -673,6 +673,72 @@ def test_git_error():
     assert git_error("", default="exit code 128") == "exit code 128"
 
 
+# ---------------------------------------------------------------- dry run
+
+
+def remote_state(url):
+    return git("ls-remote", "--heads", str(url))
+
+
+def test_update_dry_run_previews_push_and_removal(tmp_path, remotes):
+    ops = remotes["ops"]["np02"]
+    assert run(cpm_update.main, update_args(tmp_path, remotes, "v1", "-p", apparatuses=("np02",))).exit_code == 0
+    before = remote_state(ops)
+
+    ## the base "old" has no np02/shared: with -p, gen_a would be pushed and rel/shared removed
+    result = run(cpm_update.main, update_args(tmp_path, remotes, "old", "--dry-run", apparatuses=("np02",)))
+    assert result.exit_code == 0
+    out = result.output
+    assert "Step 5/5 · Previewing the push" in out and "Pushing configurations" not in out
+    assert "np02: would push rel/gen_a" in out
+    assert "np02: would remove rel/shared" in out
+    assert "✔ DRY RUN" in out and "With -p, 1 configurations would be pushed and 1 removed" in out
+    assert "Nothing was pushed or removed." in out
+    assert remote_state(ops) == before
+
+    ## the real run does what was previewed
+    assert run(cpm_update.main, update_args(tmp_path, remotes, "old", "-p", apparatuses=("np02",))).exit_code == 0
+    assert remote_branches(ops) == {"main", "rel/gen_a"}
+
+
+def test_update_dry_run_fails_like_push(tmp_path, remotes, monkeypatch):
+    ## a failed generation stops the dry run as it stops -p
+    assert run(cpm_update.main, update_args(tmp_path, remotes, "broken")).exit_code == 1
+    result = run(cpm_update.main, update_args(tmp_path, remotes, "broken", "--push-only", "--dry-run"))
+    assert result.exit_code == 1
+    assert "The push check failed for np04" in result.output
+    assert remote_branches(remotes["ops"]["np02"]) == {"main"}
+
+    ## as for -p, the base and the release must be explicit outside of a DAQ environment
+    monkeypatch.delenv("SPACK_RELEASE", raising=False)
+    args = [str(tmp_path / "area2"), "-a", "np02", "--base_url", str(remotes["base"]), *op_args(remotes, "np02"), "--dry-run"]
+    result = CliRunner().invoke(cpm_update.main, args)
+    assert result.exit_code == 2
+    assert "--base and --release must be given explicitly" in result.output
+
+
+def test_purge_dry_run(tmp_path, remotes):
+    common = [str(tmp_path / "area"), "-a", "np02,np04", "--base_url", str(remotes["base"]),
+              *op_args(remotes, "np02", "np04")]
+    assert run(cpm_update.main, [*common, "-b", "v1", "-r", "tmp", "-p"]).exit_code == 0
+    before = {a: remote_state(remotes["ops"][a]) for a in ("np02", "np04")}
+
+    result = run(cpm_purge.main, [*common, "-r", "tmp", "--conf", "shared$", "--dry-run"])
+    assert result.exit_code == 0
+    out = result.output
+    assert "Listing the configurations to remove" in out
+    assert "np02: would remove tmp/shared" in out and "np04: would remove tmp/shared" in out
+    assert "✔ DRY RUN" in out and "2 configurations of tmp would be removed" in out
+    assert {a: remote_state(remotes["ops"][a]) for a in ("np02", "np04")} == before
+
+    assert run(cpm_purge.main, [*common, "-r", "unknown", "--dry-run"]).exit_code == 1
+
+    ## the real purge removes what was listed
+    assert run(cpm_purge.main, [*common, "-r", "tmp", "--conf", "shared$"]).exit_code == 0
+    assert remote_branches(remotes["ops"]["np02"]) == {"main", "tmp/gen_a"}
+    assert remote_branches(remotes["ops"]["np04"]) == {"main", "tmp/gen_b"}
+
+
 def test_regenerate_without_pushing_in_between(tmp_path, remotes):
     ## generate and push, then generate twice from a changed base without pushing, then push
     ops = remotes["ops"]["np02"]

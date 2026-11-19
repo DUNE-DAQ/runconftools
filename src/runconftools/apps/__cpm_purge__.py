@@ -29,6 +29,8 @@ from runconftools.report import Report, Stop
               help="Operation branch prefix for the branches to be deleted")
 @click.option("--conf", type=click.STRING, default=".*",
               help="Regex to select a subset of branches, matched from the start of the configuration name (end it with '$' to match the whole name)")
+@click.option("--dry-run", type=click.BOOL, default=False, is_flag=True,
+              help="Only list the configurations that would be removed, without removing them")
 
 @click.option(
     "--debug",
@@ -37,19 +39,22 @@ from runconftools.report import Report, Stop
     is_flag=True,
     help="Set debug print levels",
 )
-def main(path, apparatus, base_url, operation_url, release, conf, debug):
+def main(path, apparatus, base_url, operation_url, release, conf, dry_run, debug):
 
     """
     Removes from the operation repos the selected configurations for a given release
     """
 
-    steps = ["Checking options and repositories", "Preparing local repositories", "Removing configurations"]
+    last_step = "Listing the configurations to remove" if dry_run else "Removing configurations"
+    steps = ["Checking options and repositories", "Preparing local repositories", last_step]
     context = {
         "Path": path,
         "Apparatuses": "all (defaults)" if apparatus is None else ", ".join(apparatus),
         "Release": release,
         "Configurations": conf,
     }
+    if dry_run:
+        context["Mode"] = "DRY RUN: the operation repos are not changed"
 
     with Report("cpm-purge", steps, context=context, debug=debug) as report:
         report.step("Checking options and repositories")
@@ -66,21 +71,30 @@ def main(path, apparatus, base_url, operation_url, release, conf, debug):
         for name, pool in pools.items():
             report.ok(f"{name}: local repo {pool.repo.working_dir}")
 
-        report.step("Removing configurations")
+        report.step(last_step)
+        column = "Would remove" if dry_run else "Removed"
         removed_total = 0
         for name, pool in pools.items():
             report.current_apparatus = name
-            removed = pool.remove_configurations(release=release, conf_regex=re.compile(conf))
+            if dry_run:
+                removed = pool.get_removable_configurations(release=release, conf_regex=re.compile(conf))
+            else:
+                removed = pool.remove_configurations(release=release, conf_regex=re.compile(conf))
             removed_total += len(removed)
             if removed:
-                report.ok(f"{name}: removed {', '.join(removed)}")
-                report.set_result(name, "Removed", f"✔ {len(removed)}")
+                report.ok(f"{name}: {'would remove' if dry_run else 'removed'} {', '.join(removed)}")
+                report.set_result(name, column, f"✔ {len(removed)}")
             else:
-                report.warn(f"Nothing removed from {name}")
-                report.set_result(name, "Removed", "⚠ 0")
+                report.warn(f"Nothing {'would be ' if dry_run else ''}removed from {name}")
+                report.set_result(name, column, "⚠ 0")
         report.current_apparatus = None
 
         if not removed_total:
-            raise Stop(f"No configuration of {release} matching '{conf}' was found, nothing is removed",
+            raise Stop(f"No configuration of {release} matching '{conf}' was found, nothing {'would be ' if dry_run else 'is '}removed",
                        hint="Check the release (-r) and the --conf regex, e.g. with cpm-setup")
-        report.success_message = f"{removed_total} configurations of {release} removed"
+        if dry_run:
+            report.success_title = "✔ DRY RUN"
+            report.success_message = f"{removed_total} configurations of {release} would be removed"
+            report.notes.append("Nothing was removed. Run without --dry-run to do it.")
+        else:
+            report.success_message = f"{removed_total} configurations of {release} removed"
