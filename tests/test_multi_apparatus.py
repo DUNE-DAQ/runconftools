@@ -651,3 +651,23 @@ def test_quiet_log_file_has_no_generator_output(tmp_path, remotes):
         assert any(line.lstrip().startswith("✔ [") and line.endswith(f"np02 · {name}") for line in text.splitlines())
     assert "✔ SUCCESS" in text
     assert len((tmp_path / "area" / "_logs" / "np02" / "noisy_b.log").read_text().splitlines()) == 2500
+
+
+def test_git_error():
+    from runconftools.ConfPool import git_error
+
+    ## as returned by gitlab over https (captured 2026-11-19)
+    https = ("remote: The project you were looking for could not be found or you don't have permission to view it.\n"
+             "fatal: repository 'https://gitlab.cern.ch/dune-daq/online/does-not-exist.git/' not found\n")
+    assert git_error(https) == "The project you were looking for could not be found or you don't have permission to view it."
+    ## the message framed by decoration lines, as gitlab does over ssh
+    ssh = ("remote: \nremote: ========================================================================\nremote: \n"
+           "remote: The project you were looking for could not be found or you don't have permission to view it.\n"
+           "remote: \nremote: ========================================================================\nremote: \n"
+           "fatal: Could not read from remote repository.\n\nPlease make sure you have the correct access rights\n"
+           "and the repository exists.\n")
+    assert git_error(ssh) == "The project you were looking for could not be found or you don't have permission to view it."
+    ## no message from the server: git's own error
+    local = "fatal: '/x.git' does not appear to be a git repository\nfatal: Could not read from remote repository.\n"
+    assert git_error(local) == "fatal: '/x.git' does not appear to be a git repository"
+    assert git_error("", default="exit code 128") == "exit code 128"

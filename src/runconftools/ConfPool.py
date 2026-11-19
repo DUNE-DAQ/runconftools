@@ -37,6 +37,30 @@ def repository_key(url: str) -> str:
     return os.path.abspath(u)
 
 
+def git_error(stderr: str, default: str = "unknown error") -> str:
+    """
+    Return the most useful line of the error output of git.
+
+    The message of the server (``remote:`` lines, e.g. gitlab's "The project you were looking for could
+    not be found ...") is preferred, as it is more specific than git's own ``fatal:`` or ``error:`` lines.
+
+    Args:
+        stderr: error output of a git command.
+        default: returned if the output is empty.
+    """
+    lines = [line.strip() for line in stderr.splitlines() if line.strip()]
+    for line in lines:
+        if line.startswith("remote:"):
+            message = line.removeprefix("remote:").strip()
+            ## skip the empty and decoration lines around the message, e.g. "========"
+            if message and any(c.isalnum() for c in message):
+                return message
+    for line in lines:
+        if line.startswith(("fatal:", "error:")):
+            return line
+    return lines[-1] if lines else default
+
+
 class GenerationListener(Protocol):
     """Receives the progress of ``ConfPool.propagate_base``, e.g. to display it."""
 
@@ -865,8 +889,7 @@ class ConfPool:
                 else:
                     problems.append(f"{branch} is refused by the operation repository {summary}")
             if not problems:
-                lines = [line.strip() for line in err.splitlines() if line.strip()]
-                reason = next((line for line in lines if line.startswith(("fatal:", "error:"))), lines[-1] if lines else status)
+                reason = git_error(err, f"exit code {status}")
                 problems.append(f"the push would fail: {reason}")
         return problems
 

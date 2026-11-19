@@ -14,28 +14,13 @@ from pathlib import Path
 import click
 import git
 
-from runconftools.ConfPool import ConfPool, repository_key
+from runconftools.ConfPool import ConfPool, git_error, repository_key
 from runconftools.report import ItemProgress, OutputCapture, Report, Stop
 
 ALL_APPARATUSES = "all"
 BASE_POOL_DIR = "_base"
 
 _NAME_REGEX = re.compile(r"^[A-Za-z0-9_]+$")
-
-
-def git_error(stderr: str, default: str = "unknown error") -> str:
-    """
-    Return the most useful line of the error output of git, i.e. the first ``fatal:`` or ``error:`` line.
-
-    Args:
-        stderr: error output of a git command.
-        default: returned if the output is empty.
-    """
-    lines = [line.strip() for line in stderr.splitlines() if line.strip()]
-    for line in lines:
-        if line.startswith(("fatal:", "error:")):
-            return line
-    return lines[-1] if lines else default
 
 
 def split_values(values: Iterable[str]) -> list[str]:
