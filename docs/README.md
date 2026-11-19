@@ -341,4 +341,10 @@ The tests use local git repositories only, and can be run with
 pip install ".[dev]"
 pytest
 ```
-Linting is done with `ruff check`.
+Linting is done with `ruff check`, configured in `pyproject.toml`. 
+The same checks run on GitHub for every pull request (`.github/workflows`): ruff, and pytest with python 3.10 and 3.12. 
+They can also be run before every commit with [pre-commit](https://pre-commit.com):
+```bash
+pip install pre-commit
+pre-commit install
+```
