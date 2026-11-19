@@ -57,6 +57,13 @@ class FetchTimedRemote(git.Remote):
         self._fetch_time: float | None = None
 
     def fetch(self, *args, **kwargs):
+        """
+        Fetch the remote, unless it was fetched less than ``fetch_timeout`` seconds ago.
+
+        The remote-tracking branches deleted on the remote are pruned by default, so that branches
+        removed elsewhere, e.g. by cpm-purge or on gitlab, are not listed anymore.
+        """
+        kwargs.setdefault("prune", True)
         current_fetch_time = perf_counter()
         if self._fetch_time is not None and current_fetch_time - self._fetch_time < self.fetch_timeout:
             logging.debug(f"Fetch called again within {self.fetch_timeout} seconds, skipping fetch")

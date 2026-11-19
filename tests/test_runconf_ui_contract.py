@@ -100,3 +100,16 @@ def test_emulation_repo_manager(tmp_path, repos, operation):
     assert sorted(pool.get_base_branches()) == ["develop", "fddaq-v5.7.2"]
     pool.checkout_base("develop")
     assert next(emu_dir.rglob("emu-session.data.xml")).read_text() == "emulation develop"
+
+
+def test_configurations_deleted_remotely_disappear(tmp_path, repos):
+    ## runconf-ui keeps its cache: a configuration removed elsewhere (e.g. purged) must not be listed anymore
+    conf_dir = tmp_path / "np02-runs"
+    conf_dir.mkdir(parents=True, exist_ok=True)
+    pool = ConfPool(str(conf_dir), "np02", repos["ops"], repos["base"])
+    assert sorted(pool.get_confs(re.compile("^fddaq-v5.7.2$"))) == ["monitoring", "pds_only"]
+
+    git("push", "-q", repos["ops"], "--delete", "fddaq-v5.7.2/pds_only", cwd=tmp_path / "ops_w")
+    pool = ConfPool(str(conf_dir), "np02", repos["ops"], repos["base"])
+    assert pool.get_confs(re.compile("^fddaq-v5.7.2$")) == ["monitoring"]
+    assert pool.checkout_conf("pds_only", "fddaq-v5.7.2") is None
