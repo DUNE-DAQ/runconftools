@@ -671,3 +671,19 @@ def test_git_error():
     local = "fatal: '/x.git' does not appear to be a git repository\nfatal: Could not read from remote repository.\n"
     assert git_error(local) == "fatal: '/x.git' does not appear to be a git repository"
     assert git_error("", default="exit code 128") == "exit code 128"
+
+
+def test_regenerate_without_pushing_in_between(tmp_path, remotes):
+    ## generate and push, then generate twice from a changed base without pushing, then push
+    ops = remotes["ops"]["np02"]
+    assert run(cpm_update.main, update_args(tmp_path, remotes, "v1", "-p", apparatuses=("np02",))).exit_code == 0
+    pushed = git("rev-parse", "rel/gen_a", cwd=ops).strip()
+    for _ in range(2):
+        assert run(cpm_update.main, update_args(tmp_path, remotes, "old", apparatuses=("np02",))).exit_code == 0
+    assert run(cpm_update.main, update_args(tmp_path, remotes, "old", "--push-only", apparatuses=("np02",))).exit_code == 0
+
+    ## the push extended the branch that was on the operation repository
+    new = git("rev-parse", "rel/gen_a", cwd=ops).strip()
+    assert new != pushed
+    assert git("merge-base", "--is-ancestor", pushed, new, cwd=ops) == ""
+    assert "base old" in git("log", "-1", "--format=%B", "rel/gen_a", cwd=ops)

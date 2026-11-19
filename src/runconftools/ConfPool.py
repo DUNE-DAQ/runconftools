@@ -663,7 +663,14 @@ class ConfPool:
             self.repo.create_head(ref_name).checkout()
         else:
             logging.debug(f"Configuration {generator} overrides the existing operation branch")
-            self.checkout_conf(generator, release=release_tag)
+            ## start from the operation branch, dropping what previous local generations committed without
+            ## pushing (e.g. a dry run): the configuration is regenerated anyway, and the push then simply
+            ## extends the operation branch. Pulling into the local branch would fail in that case.
+            local_branches = [b.name for b in self.repo.branches]
+            if ref_name in local_branches and self.repo.git.rev_list(f"operation/{ref_name}..{ref_name}"):
+                logging.info(f"The local commits of {ref_name} that were not pushed are replaced")
+            self.repo.git.checkout("-B", ref_name, f"operation/{ref_name}")
+            self.setup_conf_path()
             # whipe out the branch
             files = self.repo.index.remove(["."], r=True, working_tree=True)
             logging.debug("Removing " + ", ".join(files))
