@@ -15,23 +15,39 @@ jobs:
   pytest:
     runs-on: ubuntu-latest
 
-    ## the tests only use local git repositories, no DAQ software is needed
-    strategy:
-      fail-fast: false
-      matrix:
-        python-version: ["3.10", "3.12"]
+    defaults:
+      run:
+        shell: bash
+
+    ## the DAQ nightly environment, as used in production and by runconf-ui
+    container:
+      image: ghcr.io/dune-daq/nightly-release-alma9:development_v5
 
     steps:
       - uses: actions/checkout@v5
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python-version }}
+      - name: Set up dev nightly
+        run: |
+          mkdir nightly
+          cd nightly
+          source /cvmfs/dunedaq.opensciencegrid.org/setup_dunedaq.sh
+          setup_dbt latest_v5
+          dbt-create -n last_fddaq
+          cd NFD_DEV*
+          source env.sh
+          dbt-build
+          dbt-workarea-env
 
       - name: Install runconftools
         run: |
-          python -m pip install --upgrade pip
-          python -m pip install ".[dev]"
+          cd nightly/NFD_DEV*
+          source env.sh
+          cd ../..
+          python -m pip install -e ".[dev]"
 
       - name: Test with pytest
-        run: pytest
+        run: |
+          cd nightly/NFD_DEV*
+          source env.sh
+          cd ../..
+          pytest

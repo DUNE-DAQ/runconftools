@@ -346,7 +346,7 @@ pip install ".[dev]"
 pytest
 ```
 Linting is done with `ruff check`, configured in `pyproject.toml`. 
-The same checks run on GitHub for every pull request (`.github/workflows`): ruff, and pytest with python 3.10 and 3.12. 
+The same checks run on GitHub for every pull request (`.github/workflows`): ruff, and pytest in the Alma 9 container of the DAQ nightly. 
 They can also be run before every commit with [pre-commit](https://pre-commit.com):
 ```bash
 pip install pre-commit
