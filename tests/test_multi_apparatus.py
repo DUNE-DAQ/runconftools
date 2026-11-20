@@ -43,9 +43,7 @@ def test_get_apparatuses_skips_non_apparatus_entries(tmp_path, remotes):
     assert pool.get_apparatuses("v1") == ["np02", "np04"]
 
 
-def test_get_apparatuses_defaults_without_base(tmp_path, remotes):
-    pool = ConfPool(pool_dir(tmp_path), apparatus=None, base_url=str(remotes["base"]))
-    assert pool.get_apparatuses() == sorted(Apparatus.values())
+def test_default_apparatuses():
     assert ConfPool.default_apparatuses() == sorted(Apparatus.values())
 
 

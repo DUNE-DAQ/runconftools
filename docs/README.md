@@ -328,7 +328,7 @@ from runconftools.ConfPool import ConfPool
 Path("Temp/_base").mkdir(parents=True, exist_ok=True)
 pool = ConfPool("Temp/_base", apparatus=None, base_url="https://gitlab.cern.ch/dune-daq/online/ehn1-daqconfigs.git")
 apparati = pool.get_apparatuses("fddaq-v5.7.2")   ## ['np02', 'np02_emu', 'np04', 'np04_emu', 'vd_coldbox']
-defaults = pool.get_apparatuses()                 ## without a base, the defaults known by runconftools
+defaults = ConfPool.default_apparatuses()         ## the defaults known by runconftools
 
 ## operation URL of each apparatus, explicit URLs override the defaults
 urls = ConfPool.set_apparatuses(apparati, {"np02": "ssh://..."}, ssh=True)

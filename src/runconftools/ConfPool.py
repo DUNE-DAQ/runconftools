@@ -214,16 +214,13 @@ class ConfPool:
         """Return the apparatuses with a default operation repository, sorted."""
         return sorted(Apparatus.values())
 
-    def get_apparatuses(self, base: str | None = None) -> list[str]:
+    def get_apparatuses(self, base: str) -> list[str]:
         """
         Return the apparatuses of a base branch: the directories in functions/generators.
 
-        Without a base, return the default ones. The base gets checked out, and ValueError is raised
-        if it does not exist.
+        The base gets checked out, and ValueError is raised if it does not exist.
+        The defaults known by runconftools are given by default_apparatuses.
         """
-        if not base:
-            return self.default_apparatuses()
-
         if self.checkout_base(base) is None:
             raise ValueError(f"{base} is not among the available base branches")
 
