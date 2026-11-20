@@ -1,5 +1,6 @@
 from enum import Enum
 
+
 class Apparatus(Enum):
     NP02 = "np02"
     NP04 = "np04"

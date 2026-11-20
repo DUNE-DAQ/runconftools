@@ -11,43 +11,46 @@ Shifters will use these interfaces indirectly via the shifter interface.
 According to our configuration model, the different configurations to be used for operations are stored in different branches of operation repositories. 
 No one is expected to interface directly with those repositories: all operations are expected to be done via the interfaces defined in `runconftools`.
 There is one operation repository for each apparatus.  
-The definition of which apparati are available depends on the base repository. 
-In the interfaces defined in `runconftools` we simply provide default values for apparati and their URLs. By no means should this stop the development of other repos.
+The definition of which apparati are available depends on the base repository: they are the subdirectories of `functions/generators` in the base branch, so different base branches can define different apparati.
+In the interfaces defined in `runconftools` we simply provide default values for apparati and their URLs (see `src/runconftools/Apparatus.py`). By no means should this stop the development of other repos.
 
 The branches in the operation repositories are derived using configuration generation functions (known as generators), starting from a base repository. 
 The base repository contains both OKS objects and generators used to create operation configurations. 
+How to write a generator is described in [generator_creation.md](generator_creation.md), while [workflow.md](workflow.md) shows how a change in the base reaches the operation repositories.
 
 ## Configuration branches
 The branches on the operation repositories are named as `<version>/<configuration_key>`. 
-For stable configurations, `<version>` is in the form of `fddaq-v5.x.y` (e.g. `fdddaq-v5.2.2`), but in general it can be any string specified at the time that the generators are executed. 
+For stable configurations, `<version>` is in the form of `fddaq-v5.x.y` (e.g. `fddaq-v5.7.2`), but in general it can be any string specified at the time that the generators are executed. 
 The `<configuration_key>` is the name of the generator used to create the configuration. 
 
 Here are some examples:
- - `develop/monitoring-with-tpg` is the configuration called `monitoring-with-tpg` compatible with the OKS schema published with the nightly build including the develop branches used at the time of generation.
- - `fddaq-v5.2.2/daphne-fullstream` is the configuration called `daphne-fullstream` to be used with DAQ version v5.2.2. Note that this is used also for prep-relase branches and release candidate of the DAQ for v5.2.2. 
- - `mroda-test/monitoring-no-tpg` is a temporary configuration that might eventually replace the current `monitoring-no-tpg` pending testing. These temporary branches should be created if a particular configuration must be tested from the shifter.
+ - `develop/monitoring_no_tpg` is the configuration called `monitoring_no_tpg` compatible with the OKS schema published with the nightly build including the develop branches used at the time of generation.
+ - `fddaq-v5.7.2/daphne_selftrigger` is the configuration called `daphne_selftrigger` to be used with DAQ version v5.7.2. Note that this is used also for prep-release branches and release candidates of the DAQ for v5.7.2. 
+ - `mroda-test/monitoring_no_tpg` is a temporary configuration that might eventually replace the current `monitoring_no_tpg` pending testing. These temporary branches should be created if a particular configuration must be tested from the shifter.
    This is necessary as the shifter interface only sees whatever is stored in the operation repo. 
 
+The default branch of each operation repository is ignored when listing the configurations and is never removed by the scripts.
 
 ## Installation
-This is a python package, so just checkout the repo and call
+This is a python package, which requires python 3.10 or newer, so just checkout the repo and call
 ```bash
+git clone https://github.com/DUNE-DAQ/runconftools.git
 cd runconftools
 pip install .
 ```
 Please remember that this requires the proxy from EHN1 machines. 
 
-###
+### Access to the repositories
 In order to run the scripts you need access to CERN gitlab repositories and you should
- - setup an ssh key to CERN gitlab, in order to use `cpm-update` and `cpm-purge`
- - setup a netrc file to allow your git to access the configuration repositores via a token
+ - setup an ssh key to CERN gitlab, in order to use `cpm-update` and `cpm-purge`, which use ssh URLs by default
+ - setup a netrc file to allow your git to access the configuration repositories via a token, which is used by `cpm-setup` as it uses https URLs by default
 
 In the np04 machines, for the user `np04daq` this is already setup.
 
 ### netrc configuration
 The gitlab token is contained in the home of `np04daq` in the file `.netrc`. For obvious reason we cannot share it freely. 
 Copy the file in your home directory. 
-Please note that the file has to be visible only from the user, so you need log in as np04 and copy the content, you cannot just copy the file. 
+Please note that the file has to be visible only from the user, so you need to log in as `np04daq` and copy the content, you cannot just copy the file. 
 In your file, change the username to your username. 
 Make sure that your file has the following permissions:
 ```bash
@@ -65,122 +68,287 @@ This can be done by adding to your `.gitconfig` file the following block:
 This repository provides the following scripts.
 All script names start with `cpm-`, which stands for Configuration Pool Management.
 
+The default release (`-r`) and, for `cpm-update`, the default base (`-b`) are taken from the DAQ environment: 
+for `SPACK_RELEASE=fddaq-v5.7.2-a9-1` they are `fddaq-v5.7.2`. 
+If `SPACK_RELEASE` is not set or is not a stable release, as for nightlies, they default to `develop`. 
+To avoid pushing `develop` by accident, when `SPACK_RELEASE` is not set `cpm-update` requires `-b` and `-r` to be given explicitly in order to push. 
+The base and release in use are always printed.
+
+As the configuration branches are named `<release>/<configuration_key>`, a release cannot contain `/`, cannot start with `-` and must be valid in a git branch name. 
+
+### Output and exit codes
+All the scripts print a header with the parameters of the run and the list of steps, and a line `Step <i>/<n> · <name>` at the start of each step. 
+During the generation, each configuration is printed with its result and a counter, like `✔ [ 7/48  15%] np02 · monitoring`. 
+At the end there is always a summary, also when the script stops: the result of each apparatus, the failed configurations with the reason, the errors and warnings, and a verdict (`SUCCESS`, `COMPLETED WITH ERRORS`, `FAILED`, or `DRY RUN`). 
+When the script stops, the verdict says at which step, what was not done and what to do next.
+
+On a terminal the output is coloured; when it is redirected to a file, it is plain text with a timestamp on every log line. 
+The colours can also be disabled with the `NO_COLOR` environment variable. 
+
+The generators and the verifiers print a lot. With `cpm-update -q` their output goes to `PATH/_logs/<apparatus>/<generator>.log` instead, overwritten at every run, and only the steps, the results and the errors are printed. 
+For a failed configuration, the summary shows its log file and its last lines. 
+With `--debug` the details of the git operations are printed too.
+
+The exit code is `0` on success, `1` when the script stops because of a failure, `2` for wrong options and `130` when interrupted.
+
+### Checks before starting
+Before cloning or changing anything, the scripts check that the base and the operation repositories can be reached, which also checks your credentials, and that each operation repository has a default branch. 
+They also stop if two apparati have the same operation repository, or if the base is used as an operation repository. 
+The local repositories `PATH/<apparatus>` must not have uncommitted changes, as they could end up in the configurations: check them with `git status`, then commit or discard the changes, or use a new `PATH`.
+
+### Working on several apparatuses
+All the scripts accept one or more apparatuses with `-a`, either repeating the option or as a comma separated list:
+```bash
+cpm-update -b fddaq-v5.7.2 -r fddaq-v5.7.2 -a np02,np04 TempTest
+cpm-update -b fddaq-v5.7.2 -r fddaq-v5.7.2 -a np02 -a np04 TempTest
+```
+If `-a` is not given, only `np02` is used.
+`-a all` selects all the apparatuses: for `cpm-setup` and `cpm-update` these are the apparati defined in the selected base, 
+for `cpm-purge`, which has no base, these are the apparati with a default operation repository in `runconftools`.
+
+Every apparatus gets its own local repository in `PATH/<apparatus>`, like `TempTest/np02`, since the configuration branches of different apparati share the same names. 
+`PATH` and its subdirectories are created if needed. 
+With `-a all`, the base is inspected in `PATH/_base`.
+
+The operation repositories default to the ones known by `runconftools`. 
+They can be overridden per apparatus with `--operation_url <apparatus>=<url>`, which is mandatory for apparati without a default.
+A plain `--operation_url <url>` is still accepted when a single apparatus is selected.
+If an existing local repository points to a different operation (or base) repository than the requested one, its remote is updated with a warning.
 
 ### cpm-setup 
-This is a diagnostic script designed to setup a local area linked to both base and operation repostiories and to print some information about the configurations.
+This is a diagnostic script designed to setup a local area linked to both base and operation repositories and to print some information about the configurations.
 
-```bash
+```
 Usage: cpm-setup [OPTIONS] PATH
 
-  Set up a local repo and prints some informations.  If the conf option is
-  specified, the relevant configuration from operation is checked out for
-  inspection.
+  Set up a local repo per apparatus and print some information. If the conf
+  option is specified, the chosen configuration from operation is checked out
+  for inspection.
 
 Options:
-  -a, --apparatus TEXT         Selection of the apparatus  [default: np02]
-  --base_url TEXT              [default: https://gitlab.cern.ch/dune-
-                               daq/online/ehn1-daqconfigs.git]
-  --operation_url TEXT
-  -r, --release TEXT           [default: fddaq-v5.2.2]
-  -b, --base TEXT              If None, it is set equal to the release
-  -c, --conf TEXT
-  --debug                      Set debug print levels
-  --help                       Show this message and exit.
+  -a, --apparatus TEXT  Apparatuses to act on, either repeating the option or
+                        as a comma separated list, e.g. '-a np02,np04'. Use
+                        'all' for all the apparatuses defined in the base.
+                        Each apparatus uses the local repo PATH/<apparatus>
+                        [default: np02]
+  --base_url TEXT       URL of the base repository  [default:
+                        https://gitlab.cern.ch/dune-
+                        daq/online/ehn1-daqconfigs.git]
+  --operation_url TEXT  URL of the operation repo as <apparatus>=<url>,
+                        repeated or comma separated. Apparatuses without an
+                        explicit URL use their default repo. A plain <url> is
+                        accepted when a single apparatus is selected
+  -r, --release TEXT    Release whose configurations are listed. Defaults to
+                        the release from SPACK_RELEASE, or develop if it's not
+                        set or not a stable release  [default: (dynamic)]
+  -b, --base TEXT       Base branch to inspect. If None, it's set equal to the
+                        release
+  -c, --conf TEXT       Configuration key to be checked out. If None, the base
+                        is checked out instead
+  --debug               Set debug print levels
+  --help                Show this message and exit.
 ```
 
-The `PATH` must be an existing location and has to be either empty or a valid `ehn1-daqconfigs` repository. 
+For each apparatus, `PATH/<apparatus>` has to be either empty or a valid `ehn1-daqconfigs` repository. 
 If the directory contains a local repository, local changes may be lost so please push all changes that are important before calling `cpm-setup` on a non-empty directory.
 
-This script sets up a git repository and prints some information about the release. 
+As for `cpm-update`, the base must exist and define each selected apparatus. 
 
-The information printed is:
+This script sets up a git repository per apparatus and prints, for each of them: 
  - The list of available branches in the base, without any filtering;
  - The list of available releases in operation;
  - The list of available generators in the selected base;
  - The list of configurations in the operation repository for the selected release;
  - The list of verifiers called once a configuration is generated.
 
-### cpm-update
-This is the script that takes a base branch and propagates the changes to the operation repo, creating the necessary configurations. 
+With `-c`, the configuration is checked out in the repository of each apparatus. 
+If it does not exist for some apparati an error is printed, and if it does not exist for any of them the script exits with an error.
 
-```bash
+### cpm-update
+This is the script that takes a base branch and propagates the changes to the operation repositories, creating the necessary configurations. 
+
+```
 Usage: cpm-update [OPTIONS] PATH
 
-  This script takes the a base branch and propagates the changes to the
-  operation repo, creating the necessary configurations. As a default, the
-  branches are not pushed, use -p  or --push-only to perform the push
+  This script takes the base branch and propagates the changes to the
+  operation repos, creating the necessary configurations. As a default, the
+  branches are not pushed, use -p  or --push-only to perform the push. When
+  several apparatuses are selected, nothing is pushed unless the generation
+  succeeded for all of them.
 
 Options:
-  -a, --apparatus TEXT         Selection of the apparatus  [default: np02]
-  --base_url TEXT              Git location of the remote base repo  [default:
-                               ssh://git@gitlab.cern.ch:7999/dune-
-                               daq/online/ehn1-daqconfigs.git]
-  --operation_url TEXT         Git location of the remote operation repo. If
-                               None, the repo is set according to the
-                               apparatus
-  -b, --base TEXT              Base branch to be used as a starting point
-                               [default: fddaq-v5.2.2]
-  -r, --release TEXT           Operation branch prefix for the generated
-                               branches  [default: fddaq-v5.2.2]
-  --conf TEXT                  Regex to select a subset of generators
-                               [default: .*]
-  --push-only                  When set, it only pushes local branches,
-                               without regenerating
-  -p, --push                   Pushes the branhces, otherwise they are only
-                               created locally
-  --debug                      Set debug print levels
-  --help                       Show this message and exit.
+  -a, --apparatus TEXT  Apparatuses to act on, either repeating the option or
+                        as a comma separated list, e.g. '-a np02,np04'. Use
+                        'all' for all the apparatuses defined in the base.
+                        Each apparatus uses the local repo PATH/<apparatus>
+                        [default: np02]
+  --base_url TEXT       URL of the remote base repo  [default:
+                        ssh://git@gitlab.cern.ch:7999/dune-
+                        daq/online/ehn1-daqconfigs.git]
+  --operation_url TEXT  URL of the operation repo as <apparatus>=<url>,
+                        repeated or comma separated. Apparatuses without an
+                        explicit URL use their default repo. A plain <url> is
+                        accepted when a single apparatus is selected
+  -b, --base TEXT       Base branch to be used as a starting point. Defaults
+                        to the release from SPACK_RELEASE, or develop if it's
+                        not set or not a stable release  [default: (dynamic)]
+  -r, --release TEXT    Operation branch prefix for the generated branches.
+                        Defaults to the release from SPACK_RELEASE, or develop
+                        if it's not set or not a stable release  [default:
+                        (dynamic)]
+  --conf TEXT           Regex to select a subset of generators, matched from
+                        the start of the name (end it with '$' to match the
+                        whole name)  [default: .*]
+  --push-only           When set, it skips the generation and only pushes the
+                        existing local branches. Nothing is pushed unless all
+                        of them come from a successful generation
+  -p, --push            Pushes the branches, otherwise they are only created
+                        locally
+  --dry-run             Preview what -p would do: generate locally (unless
+                        --push-only) and check the push with the operation
+                        repos, then list the configurations that would be
+                        pushed and removed, without changing the operation
+                        repos
+  -q, --quiet           Do not print the output of the generators and
+                        verifiers, save it in
+                        PATH/_logs/<apparatus>/<generator>.log instead. Only
+                        the steps, the results and the errors are printed, the
+                        warnings are in the summary
+  --debug               Set debug print levels
+  --help                Show this message and exit.
 ```
 
-As for the setup, `PATH` has to be an existing location and has to be either empty or a valid `ehn1-configs` repository. 
+As for the setup, `PATH/<apparatus>` has to be either empty or a valid `ehn1-daqconfigs` repository. 
 As previously, ensure local changes are pushed before using an existing path with this script.
 It is recommended that a new directory is created for the operation. 
 It can be deleted once the propagation is complete. 
 
+Each selected apparatus must be defined in the base, otherwise the script stops before generating anything.
+
 The script starts by checking out the required base. 
-Then, for every generator in the base, it creates the branches using the `release` option as `version` to be used in the branch name. 
-The generators to be executed are selected using a regex with the option `conf`. 
+Then, for every generator of the apparatus in the base, it creates the branches using the `release` option as `version` to be used in the branch name. 
+The generators to be executed are selected using a regex with the option `conf`, which is matched from the start of the generator name. 
 For example
 ```bash
-cpm-update -r mroda --conf "^monitoring-.*$" Test
+cpm-update -a np04 -r mroda --conf "monitoring" Test
 ```
-will create branches called `mroda/monitoring-<something>` and will ignore all the other generators.
+will create branches called `mroda/monitoring<something>` (`mroda/monitoring` and `mroda/monitoring_no_tpg` for np04) and will ignore all the other generators.
+Use `--conf "monitoring$"` to select only `monitoring`.
+If the regex matches no generator of an apparatus, that apparatus is skipped: it is neither generated, nor pushed, nor cleaned. 
+If it matches no generator at all, the script stops with an error.
 
-When generators are executed, so are the configuration verifiers, 
-If present, the configuraiton validator associated to the generator is also executed. 
-If any verifiers or validators fail, the branch is still created and committed, but they are not pushed to the operation, even if requested. 
-This will allow local persistency to investigate the issue. 
+The generators use the software of the DAQ environment, so a warning is printed when the release is a stable one, like `fddaq-v5.7.2`, and the environment is of a different release. 
+
+When generators are executed, so are the configuration verifiers. 
+If the base has no verifiers, the configurations cannot be verified and the generation fails. 
+If present, the configuration validator associated to the generator is also executed. 
+If a generator, a verifier or a validator fails, the generation is considered failed but the local branch is kept, which allows to investigate the issue. 
+The changes are committed to the local branch, also when the generator raised an exception (the commit message then ends with `[failed with an exception]`), so the working tree is clean for the next generator.
 
 By default, the script does not push.
 This is done explicitly with the `-p` option.
-After a local geneation, `cpm-update` can be followed up with another call with the `--push-only` which pushes the local branches corresponding to the existing generators. 
+With `-p`, the branches are pushed only if the generation succeeded for all the selected generators of all the selected apparati: if anything failed, nothing is pushed and the script exits with an error.
 
+After a local generation, `cpm-update` can be followed up with another call with `--push-only`, which skips the generation and pushes the local branches corresponding to the existing generators selected by `conf`. 
+
+A branch that failed or is broken is never pushed, neither with `-p` nor with `--push-only`. 
+When a generation succeeds (generator, verifiers and validator), its commit is recorded in the local ref `refs/runconftools/verified/<branch>`; 
+the record is removed as soon as the branch is regenerated, and a branch is only pushed if it still points to the recorded commit. 
+So `--push-only` refuses branches whose last generation failed, branches changed by hand after the generation, and branches without a record of a successful generation, as in areas created by older versions of runconftools. 
+If any selected branch of any selected apparatus is not verified, nothing is pushed and the script exits with an error: regenerate the configurations first.
+
+Before pushing anything, the push of every branch of every apparatus is also tried with `git push --dry-run`. 
+This detects missing credentials and branches that were changed on the operation repository in the meantime, in which case nothing is pushed. 
+Rules applied by the server when receiving the push, like protected branches, cannot be checked in advance.
+
+After pushing, with either `-p` or `--push-only`, the branches of the release whose generators no longer exist in the base are removed from the operation repositories. 
+The branches to be removed are printed before removing them. 
+If the base has no generators for an apparatus, nothing is removed from its operation repository, as all its configurations would look obsolete. 
+The removal compares with the base given with `-b`, so always use the base the release was generated from.
+
+#### Previewing a push with `--dry-run`
+`cpm-update --dry-run` shows what `-p` would do, without changing the operation repositories. 
+It goes through the same steps as `-p`, so it generates the configurations locally (unless `--push-only` is given) and checks the push with the operation repositories, with the same checks and failures. 
+Then, instead of pushing and removing, it lists for each apparatus the configurations that would be pushed and the ones that would be removed, and ends with a `DRY RUN` verdict:
+```bash
+cpm-update -a all -b fddaq-v5.7.2 -r fddaq-v5.7.2 --dry-run Temp   # check what would happen
+cpm-update -a all -b fddaq-v5.7.2 -r fddaq-v5.7.2 -p Temp          # then do it
+```
+The second call regenerates the configurations: if the base did not change in between, they are the same as the ones previewed.
 
 ### cpm-purge
 Sometimes temporary branches must be pushed to operation repositories as they need to be tested through the shifter interface.
 Once the test is done the branches should be removed with `cpm-purge`.
-This is done with `cpm-purge`
-```bash
+```
 Usage: cpm-purge [OPTIONS] PATH
 
-  This script removes from the operation repo the selected configurations for
-  a given release
+  Removes from the operation repos the selected configurations for a given
+  release
 
 Options:
-  -a, --apparatus TEXT         Selection of the apparatus  [default: np02]
-  --base_url TEXT              Git location of the remote base repo  [default:
-                               ssh://git@gitlab.cern.ch:7999/dune-
-                               daq/online/ehn1-daqconfigs.git]
-  --operation_url TEXT         Git location of the remote operation repo. If
-                               None, the repo is set according to the
-                               apparatus
-  -r, --release TEXT           Operation branch prefix for the branches to be
-                               deleted
-  --conf TEXT                  Regex to select a subset of branches  [default:
-                               .*]
-  --debug                      Set debug print levels
-  --help                       Show this message and exit.
+  -a, --apparatus TEXT  Apparatuses to act on, either repeating the option or
+                        as a comma separated list, e.g. '-a np02,np04'. Use
+                        'all' for all the apparatuses with a default operation
+                        repo. Each apparatus uses the local repo
+                        PATH/<apparatus>  [default: np02]
+  --base_url TEXT       URL of the remote base repo  [default:
+                        ssh://git@gitlab.cern.ch:7999/dune-
+                        daq/online/ehn1-daqconfigs.git]
+  --operation_url TEXT  URL of the operation repo as <apparatus>=<url>,
+                        repeated or comma separated. Apparatuses without an
+                        explicit URL use their default repo. A plain <url> is
+                        accepted when a single apparatus is selected
+  -r, --release TEXT    Operation branch prefix for the branches to be deleted
+                        [required]
+  --conf TEXT           Regex to select a subset of branches, matched from the
+                        start of the configuration name (end it with '$' to
+                        match the whole name)  [default: .*]
+  --dry-run             Only list the configurations that would be removed,
+                        without removing them
+  --debug               Set debug print levels
+  --help                Show this message and exit.
 ```
 
-This removes the branches with for a specified release.
-As for the update script, the configuration keys can be selected using a regex with the option `--conf`. 
+This removes the branches for the release specified with `-r`, which is mandatory.
+As for the update script, the configuration keys can be selected using a regex with the option `--conf`, which is matched from the start of the configuration name. 
+If nothing is removed at all, because the release or the configurations do not exist, the script exits with an error. 
+For example, `cpm-purge -a all -r mroda-test Temp` removes all the `mroda-test` configurations from all the operation repositories. 
+With `--dry-run`, the configurations that would be removed are only listed, and nothing is removed.
+
+## Python interface
+The scripts are thin wrappers around the `ConfPool` class, which can be used directly. 
+A `ConfPool` links a local repository to the base and to the operation repository of one apparatus:
+```python
+from pathlib import Path
+
+from runconftools.ConfPool import ConfPool
+
+## base-only pool: no operation repository, only the base related methods can be used
+## the directory must exist, and be either empty or a local repository
+Path("Temp/_base").mkdir(parents=True, exist_ok=True)
+pool = ConfPool("Temp/_base", apparatus=None, base_url="https://gitlab.cern.ch/dune-daq/online/ehn1-daqconfigs.git")
+apparati = pool.get_apparatuses("fddaq-v5.7.2")   ## ['np02', 'np02_emu', 'np04', 'np04_emu', 'vd_coldbox']
+defaults = ConfPool.default_apparatuses()         ## the defaults known by runconftools
+
+## operation URL of each apparatus, explicit URLs override the defaults
+urls = ConfPool.set_apparatuses(apparati, {"np02": "ssh://..."}, ssh=True)
+```
+Methods that need an operation repository raise a `RuntimeError` on a base-only pool. 
+`push_configurations` only pushes branches that come from a successful generation, see `is_verified` and `get_unverified_configurations`. 
+`ConfPool` is used directly by [runconf-ui](https://github.com/DUNE-DAQ/runconf-ui), the shifter interface: `tests/test_runconf_ui_contract.py` replays its calls, so keep it passing (or update runconf-ui together) when changing `ConfPool`. 
+The progress of `propagate_base` can be followed with its `listener` argument (see `GenerationListener`), and after a failed `generate_conf` the reason is in `last_failure`. 
+The generators, verifiers and common functions are always imported from the working tree of the pool calling them, so several pools and bases can be used in the same process.
+
+## Development
+The tests use local git repositories only, and can be run with
+```bash
+pip install ".[dev]"
+pytest
+```
+Linting is done with `ruff check`, configured in `pyproject.toml`. 
+The same checks run on GitHub for every pull request (`.github/workflows`): ruff, and pytest in the Alma 9 container of the DAQ nightly. 
+They can also be run before every commit with [pre-commit](https://pre-commit.com):
+```bash
+pip install pre-commit
+pre-commit install
+```
