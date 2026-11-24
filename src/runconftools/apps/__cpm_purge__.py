@@ -1,36 +1,36 @@
 #!/usr/bin/env python3
 
-import logging
 import re
-from pathlib import Path
 
 import click
 
-from runconftools.Apparatus import Apparatus 
-from runconftools.ConfPool import ConfPool
+from runconftools.apps._common import (
+    apparatus_option,
+    check_repositories,
+    open_pools,
+    operation_url_option,
+    select_apparatuses,
+    validate_release,
+)
+from runconftools.report import Report, Stop
 
 
-@click.command(context_settings={'show_default': True}) 
+@click.command(context_settings={'show_default': True})
 @click.argument("path", type=click.Path(exists=False, file_okay=False, writable=True))
-@click.option("-a", "--apparatus",
-              type=click.STRING, 
-              default="np02", help="Selection of the apparatus")
+@apparatus_option("all the apparatuses with a default operation repo")
 @click.option(
     "--base_url",
     type=click.STRING,
     default="ssh://git@gitlab.cern.ch:7999/dune-daq/online/ehn1-daqconfigs.git",
     help="URL of the remote base repo"
 )
-@click.option(
-    "--operation_url",
-    type=click.STRING,
-    default=None,
-    help="URL of the remote operation repo. If None, the repo is set according to the apparatus"
-)
-@click.option("-r", "--release", type=click.STRING, default =None,
+@operation_url_option()
+@click.option("-r", "--release", type=click.STRING, required=True, callback=validate_release,
               help="Operation branch prefix for the branches to be deleted")
 @click.option("--conf", type=click.STRING, default=".*",
-              help="Regex to select a subset of branches")
+              help="Regex to select a subset of branches, matched from the start of the configuration name (end it with '$' to match the whole name)")
+@click.option("--dry-run", type=click.BOOL, default=False, is_flag=True,
+              help="Only list the configurations that would be removed, without removing them")
 
 @click.option(
     "--debug",
@@ -39,28 +39,62 @@ from runconftools.ConfPool import ConfPool
     is_flag=True,
     help="Set debug print levels",
 )
-def main(path, apparatus, base_url, operation_url, release, conf, debug):
+def main(path, apparatus, base_url, operation_url, release, conf, dry_run, debug):
 
     """
-    Removes from the operation repo the selected configurations for a given release 
+    Removes from the operation repos the selected configurations for a given release
     """
 
-    logging.basicConfig(
-        format="%(asctime)s %(levelname)-8s %(message)s",
-        level=logging.DEBUG if debug else logging.INFO,
-        datefmt="%Y-%m-%d %H:%M:%S",
-    )
+    last_step = "Listing the configurations to remove" if dry_run else "Removing configurations"
+    steps = ["Checking options and repositories", "Preparing local repositories", last_step]
+    context = {
+        "Path": path,
+        "Apparatuses": "all (defaults)" if apparatus is None else ", ".join(apparatus),
+        "Release": release,
+        "Configurations": conf,
+    }
+    if dry_run:
+        context["Mode"] = "DRY RUN: the operation repos are not changed"
 
+    with Report("cpm-purge", steps, context=context, debug=debug) as report:
+        report.step("Checking options and repositories")
+        check_repositories(base_url=base_url)
+        report.ok(f"Base repository reachable: {base_url}")
+        ## there is no base here, so 'all' stands for the default apparatuses
+        operation_urls = select_apparatuses(path, base_url, None, apparatus, operation_url, ssh=True)
+        check_repositories(operation_urls=operation_urls)
+        report.table("Operation repositories", ["Apparatus", "Repository"], [[a, u] for a, u in operation_urls.items()])
+        report.ok(f"{len(operation_urls)} operation repositories reachable")
 
-    if not operation_url :
-        apparatus_enum = Apparatus.from_string(apparatus)
-        operation_url = apparatus_enum.ssh_url()
+        report.step("Preparing local repositories")
+        pools = open_pools(path, operation_urls, base_url)
+        for name, pool in pools.items():
+            report.ok(f"{name}: local repo {pool.repo.working_dir}")
 
-    Path(path).mkdir(parents=True, exist_ok=True)
+        report.step(last_step)
+        column = "Would remove" if dry_run else "Removed"
+        removed_total = 0
+        for name, pool in pools.items():
+            report.current_apparatus = name
+            if dry_run:
+                removed = pool.get_removable_configurations(release=release, conf_regex=re.compile(conf))
+            else:
+                removed = pool.remove_configurations(release=release, conf_regex=re.compile(conf))
+            removed_total += len(removed)
+            if removed:
+                report.ok(f"{name}: {'would remove' if dry_run else 'removed'} {', '.join(removed)}")
+                report.set_result(name, column, f"✔ {len(removed)}")
+            else:
+                report.warn(f"Nothing {'would be ' if dry_run else ''}removed from {name}")
+                report.set_result(name, column, "⚠ 0")
+        report.current_apparatus = None
 
-    pool = ConfPool(path, operation_url=operation_url, base_url=base_url, apparatus=apparatus)
-
-    removed = pool.remove_configurations(release=release, conf_regex=re.compile(conf))
-    logging.info("Removed branches: %s", ", ".join(removed))
-
-
+        if not removed_total:
+            raise Stop(f"No configuration of {release} matching '{conf}' was found, nothing {'would be ' if dry_run else 'is '}removed",
+                       hint="Check the release (-r) and the --conf regex, e.g. with cpm-setup")
+        if dry_run:
+            report.success_title = "✔ DRY RUN"
+            report.success_message = f"{removed_total} configurations of {release} would be removed"
+            report.notes.append("Nothing was removed. Run without --dry-run to do it.")
+        else:
+            report.success_message = f"{removed_total} configurations of {release} removed"
